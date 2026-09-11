@@ -453,8 +453,12 @@ class CredIssuerService(BaseService):
     ) -> httpx.Response:
         """Make an authenticated request to CredIssuer."""
 
+        token = self.token.strip()
+        if not token.lower().startswith("bearer "):
+            token = f"Bearer {token}"
+
         headers = {
-            "Authorization": f"Bearer {self.token}",
+            "Authorization": token,
             "Accept": "application/json",
         }
 

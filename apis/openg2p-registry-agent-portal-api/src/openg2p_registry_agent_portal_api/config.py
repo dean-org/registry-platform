@@ -1,7 +1,7 @@
 from typing import List, Optional
 
 from openg2p_registry_extensions.config import Settings as ExtSettings
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from pydantic_settings import SettingsConfigDict
 
 from . import __version__
@@ -160,3 +160,28 @@ class Settings(ExtSettings):
             if definition.config_id == config_id:
                 return definition
         return None
+     
+        credential_api_base_url: str = Field(
+        "https://api.credissuer.com/api",
+        validation_alias="CREDENTIAL_API_BASE_URL",
+    )
+    credential_api_token: Optional[str] = Field(
+        None,
+        validation_alias="CREDENTIAL_API_TOKEN",
+    )
+    credential_api_template_id: Optional[str] = Field(
+        None,
+        validation_alias="CREDENTIAL_API_TEMPLATE_ID",
+    )
+    credential_api_org_code: Optional[str] = Field(
+        None,
+        validation_alias="CREDENTIAL_API_ORG_CODE",
+    )
+    credential_api_issuer_email: Optional[str] = Field(
+        None,
+        validation_alias="CREDENTIAL_API_ISSUER_EMAIL",
+    )
+    credential_api_http_timeout: int = Field(
+        60,
+        validation_alias="CREDENTIAL_API_HTTP_TIMEOUT",
+    )
