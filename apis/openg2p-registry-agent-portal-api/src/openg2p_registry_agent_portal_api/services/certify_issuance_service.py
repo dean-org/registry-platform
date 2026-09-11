@@ -62,6 +62,11 @@ class CertifyIssuanceService(BaseService):
     async def _create_offer(
         self, client: httpx.AsyncClient, base: str, claims: dict[str, Any], config_id: str
     ) -> str:
+       
+        _logger.info(
+                "Sending claims to Inji Certify. claim_keys=%s",
+                list(claims.keys()),
+            )
         resp = await client.post(
             f"{base}/pre-authorized-data",
             json={
