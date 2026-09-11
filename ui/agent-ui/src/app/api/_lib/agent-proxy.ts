@@ -125,10 +125,6 @@ async function proxyBinary(req: NextRequest, endpoint: string, defaultFilename: 
   return target;
 }
 
-export async function proxyIssue(req: NextRequest) {
-  return proxyBinary(req, "issue", "credential.pdf");
-}
-
 export async function proxyCredIssuerIssue(req: NextRequest) {
   return proxyBinary(req, "issue/credissuer", "credential.pdf");
 }
