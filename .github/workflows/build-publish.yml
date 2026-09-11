@@ -1,7 +1,7 @@
 name: Build & Publish
 
 # Thin caller: all versioning/build/publish logic lives in
-# openg2p/openg2p-packaging@v1. This file declares only what THIS repo contains.
+# openg2p/openg2p-packaging@v1. This file declares only what THIS repo contains. 
 #
 # These images are the BASE for farmer-registry, national-social-registry and
 # disability-registry, which build FROM them -- so their names are load-bearing. 
