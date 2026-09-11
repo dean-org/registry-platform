@@ -21,6 +21,10 @@ on:
         type: string
         default: ''
 
+permissions:
+      contents: read
+      packages: write
+    
 jobs:
   build-publish:
     uses: openg2p/openg2p-packaging/.github/workflows/build-publish.yml@v1
