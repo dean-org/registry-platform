@@ -115,6 +115,19 @@ class VcIssuanceController(BaseController):
             methods=["POST"],
         )
 
+        self.router.add_api_route(
+            "/issue/credissuer",
+            self.issue_credissuer,
+            responses={
+                200: {
+                    "content": {"application/pdf": {}},
+                    "description": "The printable credential issued through CredIssuer.",
+                },
+                400: {"model": IssueVcResponse},
+            },
+            methods=["POST"],
+        )
+
     # ── helpers ───────────────────────────────────────────────────────────────
     @staticmethod
     def _agent_id(request: Request) -> str:

@@ -157,4 +157,52 @@ export const api = {
       issuanceId: resp.headers.get("X-Issuance-Id") ?? "",
     };
   },
+
+   async issueWithCredIssuer(
+    internal_record_id: string,
+    authentication_id: string,
+    vc_type?: string,
+  ): Promise<{ blob: Blob; filename: string; issuanceId: string }> {
+    const resp = await fetch(`${BASE}/issue/credissuer`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...csrfHeaders() },
+      body: JSON.stringify({
+        internal_record_id,
+        authentication_id,
+        vc_type,
+      }),
+    });
+
+    if (resp.status === 401) toLogin();
+
+    if (!resp.ok) {
+      let code = String(resp.status);
+      let message = resp.statusText;
+
+      try {
+        const body = await resp.json();
+        code =
+          body.response_header?.response_error_code ??
+          body.errors?.[0]?.code ??
+          code;
+        message =
+          body.response_header?.response_error_message ??
+          body.errors?.[0]?.message ??
+          message;
+      } catch {
+        /* non-JSON error body; keep the status text */
+      }
+
+      throw new ApiError(code, message);
+    }
+
+    const disposition = resp.headers.get("Content-Disposition") ?? "";
+    const match = /filename="([^"]+)"/.exec(disposition);
+
+    return {
+      blob: await resp.blob(),
+      filename: match?.[1] ?? "credential.pdf",
+      issuanceId: resp.headers.get("X-Issuance-Id") ?? "",
+    };
+  },
 };

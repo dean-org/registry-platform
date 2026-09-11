@@ -262,3 +262,10 @@ class Config:
             and self.staff_client_id
             and self.staff_password
         )
+
+credential_api_base_url = "https://api.credissuer.com/api"
+credential_api_token = "Bearer 8e13c6a971d24854de223a4f7a4d080795f6b210"
+credential_api_template_id = "82D94F756B7A"
+credential_api_org_code = "FARME-0E7VU"
+credential_api_issuer_email = "nudili@denipl.net"
+credential_api_http_timeout = 60

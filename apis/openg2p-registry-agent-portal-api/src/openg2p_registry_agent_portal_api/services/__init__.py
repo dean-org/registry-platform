@@ -1,5 +1,6 @@
 from .beneficiary_auth_service import BeneficiaryAuthError, BeneficiaryAuthService
 from .certify_issuance_service import CertifyIssuanceError, CertifyIssuanceService
+from .credissuer_service import CredIssuerError, CredIssuerService
 from .credential_verification_service import (
     CredentialVerificationError,
     CredentialVerificationService,

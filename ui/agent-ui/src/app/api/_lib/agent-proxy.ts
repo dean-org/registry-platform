@@ -86,3 +86,49 @@ export async function proxyIssue(req: NextRequest) {
     applyBackendSetCookies(res, target);
     return target;
 }
+
+async function proxyBinary(req: NextRequest, endpoint: string, defaultFilename: string) {
+  const auth = requireAuth(req);
+  if (auth instanceof NextResponse) return auth;
+
+  const backendConfig = getBackendConfig();
+
+  let payload: unknown = {};
+  try {
+    payload = await req.json();
+  } catch {
+    payload = {};
+  }
+
+  const res = await fetch(`${backendConfig.backendApiUrl}/agent_portal/vc/${endpoint}`, {
+    method: "POST",
+    headers: auth.backendHeaders,
+    body: JSON.stringify(envelope(payload, req.nextUrl.origin)),
+    cache: "no-store",
+  });
+
+  if (!res.ok || !(res.headers.get("content-type") || "").includes("application/pdf")) {
+    return jsonResponseFromBackend(res);
+  }
+
+  const target = new NextResponse(await res.arrayBuffer(), {
+    status: res.status,
+    headers: {
+      "Content-Type": "application/pdf",
+      "Content-Disposition": res.headers.get("Content-Disposition") ?? `attachment; filename="${defaultFilename}"`,
+      "X-Issuance-Id": res.headers.get("X-Issuance-Id") ?? "",
+      "X-Credential-Id": res.headers.get("X-Credential-Id") ?? "",
+      "X-Vc-Type": res.headers.get("X-Vc-Type") ?? "",
+    },
+  });
+  applyBackendSetCookies(res, target);
+  return target;
+}
+
+export async function proxyIssue(req: NextRequest) {
+  return proxyBinary(req, "issue", "credential.pdf");
+}
+
+export async function proxyCredIssuerIssue(req: NextRequest) {
+  return proxyBinary(req, "issue/credissuer", "credential.pdf");
+}

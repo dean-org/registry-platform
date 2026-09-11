@@ -248,6 +248,10 @@ export default function IssueFlow() {
         <button onClick={onIssue} disabled={busy || stage !== "issue"}>
           Download credential
         </button>
+        <h2>CredIssuer Credential</h2>
+        <button onClick={onCredIssuerIssue} disabled={busy || stage !== "issue"}>
+          Download credential
+        </button>
         {issued && (
           <p className="ok">
             Downloaded <strong>{issued.filename}</strong>. Print it and hand it to the
@@ -266,4 +270,43 @@ export default function IssueFlow() {
       )}
     </div>
   );
+}
+
+async function onCredIssuerIssue() {
+  if (!beneficiary) return;
+
+  setBusy(true);
+  setError("");
+
+  try {
+    const { blob, filename, issuanceId } =
+      await api.issueWithCredIssuer(
+        beneficiary.internal_record_id,
+        authId,
+        vcType || undefined,
+      );
+
+    // Download the PDF returned by the backend.
+    const url = URL.createObjectURL(blob);
+
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+
+    URL.revokeObjectURL(url);
+
+    setIssued({
+      filename,
+      issuanceId,
+    });
+
+    setStage("done");
+  } catch (e) {
+    setError((e as ApiError).message);
+  } finally {
+    setBusy(false);
+  }
 }
