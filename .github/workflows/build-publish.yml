@@ -1,10 +1,10 @@
 name: Build & Publish
 
 # Thin caller: all versioning/build/publish logic lives in
-# openg2p/openg2p-packaging@v1. This file declares only what THIS repo contains.
+# openg2p/openg2p-packaging@v1. This file declares only what THIS repo contains. 
 #
 # These images are the BASE for farmer-registry, national-social-registry and
-# disability-registry, which build FROM them -- so their names are load-bearing.
+# disability-registry, which build FROM them -- so their names are load-bearing. 
 
 on:
   push:
@@ -21,6 +21,10 @@ on:
         type: string
         default: ''
 
+permissions:
+      contents: read
+      packages: write
+    
 jobs:
   build-publish:
     uses: openg2p/openg2p-packaging/.github/workflows/build-publish.yml@v1
@@ -32,7 +36,7 @@ jobs:
         [
           {
             "name": "staff-api",
-            "repo": "openg2p/openg2p-registry-staff-api",
+            "repo": "dharanidharan0411/openg2p-registry-staff-api",
             "dockerfile": "docker/staff-api/Dockerfile",
             "pins": [
               {
@@ -49,7 +53,7 @@ jobs:
           },
           {
             "name": "partner-api",
-            "repo": "openg2p/openg2p-registry-partner-api",
+            "repo": "dharanidharan0411/openg2p-registry-partner-api",
             "dockerfile": "docker/partner-api/Dockerfile",
             "pins": [
               {
@@ -66,7 +70,7 @@ jobs:
           },
           {
             "name": "bene-api",
-            "repo": "openg2p/openg2p-registry-bene-api",
+            "repo": "dharanidharan0411/openg2p-registry-bene-api",
             "dockerfile": "docker/bene-api/Dockerfile",
             "pins": [
               {
@@ -83,7 +87,7 @@ jobs:
           },
           {
             "name": "agent-portal-api",
-            "repo": "openg2p/openg2p-registry-agent-portal-api",
+            "repo": "dharanidharan0411/openg2p-registry-agent-portal-api",
             "dockerfile": "docker/agent-portal-api/Dockerfile",
             "pins": [
               {
@@ -100,7 +104,7 @@ jobs:
           },
           {
             "name": "celery",
-            "repo": "openg2p/openg2p-registry-celery",
+            "repo": "dharanidharan0411/openg2p-registry-celery",
             "dockerfile": "docker/celery/Dockerfile",
             "pins": [
               {
@@ -117,7 +121,7 @@ jobs:
           },
           {
             "name": "db-seed",
-            "repo": "openg2p/openg2p-registry-db-seed",
+            "repo": "dharanidharan0411/openg2p-registry-db-seed",
             "dockerfile": "docker/db-seed/Dockerfile",
             "pins": [
               {
@@ -129,18 +133,18 @@ jobs:
           },
           {
             "name": "sanity-tests",
-            "repo": "openg2p/openg2p-registry-sanity-tests",
+            "repo": "dharanidharan0411/openg2p-registry-sanity-tests",
             "dockerfile": "docker/sanity/Dockerfile"
           },
           {
             "name": "staff-ui",
-            "repo": "openg2p/openg2p-registry-staff-ui",
+            "repo": "dharanidharan0411/openg2p-registry-staff-ui",
             "dockerfile": "ui/staff-ui/Dockerfile",
             "context": "ui/staff-ui"
           },
           {
             "name": "agent-ui",
-            "repo": "openg2p/openg2p-registry-agent-ui",
+            "repo": "dharanidharan0411/openg2p-registry-agent-ui",
             "dockerfile": "ui/agent-ui/Dockerfile",
             "context": "ui/agent-ui"
           }
