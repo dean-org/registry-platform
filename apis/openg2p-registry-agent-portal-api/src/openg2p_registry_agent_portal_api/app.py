@@ -15,6 +15,7 @@ from .services import (
     CredentialVerificationService,
     BeneficiaryAuthService,
     CertifyIssuanceService,
+    CredIssuerService,
     IssuanceLogService,
     PdfRenderService,
     RegistryLookupService,
@@ -29,6 +30,7 @@ class Initializer(BaseInitializer):
         RegistryLookupService()
         BeneficiaryAuthService()
         CertifyIssuanceService()
+        CredIssuerService()
         CredentialVerificationService()
         PdfRenderService()
         IssuanceLogService()
