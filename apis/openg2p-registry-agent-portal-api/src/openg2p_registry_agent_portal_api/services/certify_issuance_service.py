@@ -65,7 +65,7 @@ class CertifyIssuanceService(BaseService):
        
         _logger.info(
                 "Sending claims to Inji Certify. claim_keys=%s",
-                list(claims.keys()),
+                claims,
             )
         resp = await client.post(
             f"{base}/pre-authorized-data",
