@@ -12,7 +12,13 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { ApiError, api, type AuthStatus, type Beneficiary, type VcType } from "@/api/client";
+import {
+  ApiError,
+  api,
+  type AuthStatus,
+  type Beneficiary,
+  type VcType,
+} from "@/api/client";
 
 /** Stop polling eventually — the beneficiary may simply walk away. */
 const POLL_TIMEOUT_MS = 5 * 60 * 1000;
@@ -29,7 +35,11 @@ export default function IssueFlow() {
   const [stage, setStage] = useState<Stage>("lookup");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>("");
-  const [issued, setIssued] = useState<{ filename: string; issuanceId: string } | null>(null);
+  const [issued, setIssued] = useState<{
+    filename: string;
+    issuanceId: string;
+  } | null>(null);
+
   const pollRef = useRef<number | null>(null);
   const popupRef = useRef<Window | null>(null);
 
@@ -37,7 +47,10 @@ export default function IssueFlow() {
     api.vcTypes()
       .then((r) => {
         setVcTypes(r.vc_types);
-        if (r.vc_types.length) setVcType(r.vc_types[0].config_id);
+
+        if (r.vc_types.length) {
+          setVcType(r.vc_types[0].config_id);
+        }
       })
       .catch((e: ApiError) => setError(e.message));
   }, []);
@@ -53,6 +66,10 @@ export default function IssueFlow() {
 
   function reset() {
     stopPolling();
+
+    popupRef.current?.close?.();
+    popupRef.current = null;
+
     setBeneficiary(null);
     setAuthId("");
     setStatus(null);
@@ -64,13 +81,25 @@ export default function IssueFlow() {
 
   async function onLookup(e: React.FormEvent) {
     e.preventDefault();
+
     setBusy(true);
     setError("");
+
     try {
-      const found = await api.lookup(nationalId.trim(), vcType || undefined);
+      const found = await api.lookup(
+        nationalId.trim(),
+        vcType || undefined,
+      );
+
       setBeneficiary(found);
       setStage(found.eligible ? "authenticate" : "lookup");
-      if (!found.eligible) setError(found.reason ?? "This record cannot be issued a credential.");
+
+      if (!found.eligible) {
+        setError(
+          found.reason ??
+            "This record cannot be issued a credential.",
+        );
+      }
     } catch (e) {
       setError((e as ApiError).message);
     } finally {
@@ -80,68 +109,98 @@ export default function IssueFlow() {
 
   async function onAuthenticate() {
     if (!beneficiary) return;
+
     setBusy(true);
     setError("");
+
     try {
       const started = await api.startAuthentication(
         beneficiary.internal_record_id,
         vcType || undefined,
       );
+
       setAuthId(started.authentication_id);
 
-      // The beneficiary authenticates at the identity provider, not here. A
-      // centred popup mirrors the registry's own ID-authentication widget — the
-      // same size, because eSignet's screens (biometric capture especially) do
-      // not fit a narrow window.
+      // The beneficiary authenticates at the identity provider, not here.
+      // A centred popup mirrors the registry's own ID-authentication widget.
       const w = 1024;
       const h = 800;
-      const left = window.screenX + Math.max(0, (window.outerWidth - w) / 2);
-      const top = window.screenY + Math.max(0, (window.outerHeight - h) / 2);
+
+      const left =
+        window.screenX +
+        Math.max(0, (window.outerWidth - w) / 2);
+
+      const top =
+        window.screenY +
+        Math.max(0, (window.outerHeight - h) / 2);
+
       const popup = window.open(
         started.authorization_url,
         "beneficiary-auth",
         `popup=yes,width=${w},height=${h},left=${left},top=${top}`,
       );
+
       if (!popup) {
-        setError("The authentication window was blocked. Allow popups for this site and try again.");
+        setError(
+          "The authentication window was blocked. Allow popups for this site and try again.",
+        );
+
         setBusy(false);
         return;
       }
+
       popupRef.current = popup;
       popup.focus?.();
 
       stopPolling();
+
       const startedAt = Date.now();
-      pollRef.current = window.setInterval(async () => {
-        // Give up rather than poll forever: the beneficiary may walk away, or
-        // close the window without finishing.
-        if (Date.now() - startedAt > POLL_TIMEOUT_MS) {
-          stopPolling();
-          setError("Authentication timed out. Ask the beneficiary to try again.");
-          return;
-        }
-        try {
-          const s = await api.authenticationStatus(
-            beneficiary.internal_record_id,
-            started.authentication_id,
-          );
-          setStatus(s);
-          if (s.authorised) {
+
+      pollRef.current = window.setInterval(
+        async () => {
+          // Give up rather than poll forever.
+          if (Date.now() - startedAt > POLL_TIMEOUT_MS) {
             stopPolling();
-            popupRef.current?.close?.();
-            setStage("issue");
+
+            setError(
+              "Authentication timed out. Ask the beneficiary to try again.",
+            );
+
             return;
           }
-        } catch {
-          /* transient; the next tick retries */
-        }
-        // Closed without success — say so instead of spinning silently. Checked
-        // after the status call so a popup that closes on completion still wins.
-        if (popupRef.current?.closed) {
-          stopPolling();
-          setError("The authentication window was closed before it completed.");
-        }
-      }, 2000);
+
+          try {
+            const s = await api.authenticationStatus(
+              beneficiary.internal_record_id,
+              started.authentication_id,
+            );
+
+            setStatus(s);
+
+            if (s.authorised) {
+              stopPolling();
+
+              popupRef.current?.close?.();
+
+              setStage("issue");
+
+              return;
+            }
+          } catch {
+            // Transient error; the next tick retries.
+          }
+
+          // Closed without success.
+          if (popupRef.current?.closed) {
+            stopPolling();
+
+            setError(
+              "The authentication window was closed before it completed.",
+            );
+          }
+        },
+        2000,
+      );
     } catch (e) {
       setError((e as ApiError).message);
     } finally {
@@ -149,25 +208,95 @@ export default function IssueFlow() {
     }
   }
 
+  /**
+   * Existing Inji Certify issuance flow.
+   */
   async function onIssue() {
     if (!beneficiary) return;
+
     setBusy(true);
     setError("");
+
     try {
       const { blob, filename, issuanceId } = await api.issue(
         beneficiary.internal_record_id,
         authId,
         vcType || undefined,
       );
-      // Hand the file to the browser so the agent can print it on whatever
-      // printer the counter has.
+
+      // Hand the file to the browser so the agent can print it.
       const url = URL.createObjectURL(blob);
+
       const a = document.createElement("a");
       a.href = url;
       a.download = filename;
+
+      document.body.appendChild(a);
       a.click();
+      a.remove();
+
       URL.revokeObjectURL(url);
-      setIssued({ filename, issuanceId });
+
+      setIssued({
+        filename,
+        issuanceId,
+      });
+
+      setStage("done");
+    } catch (e) {
+      setError((e as ApiError).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  /**
+   * New CredIssuer issuance flow.
+   *
+   * The backend performs:
+   *
+   * 1. Beneficiary authentication validation
+   * 2. Registry lookup
+   * 3. CredIssuer issuance
+   * 4. Credential lookup
+   * 5. PDF presentation generation
+   * 6. PDF download
+   */
+  async function onCredIssuerIssue() {
+    if (!beneficiary) return;
+
+    setBusy(true);
+    setError("");
+
+    try {
+      const {
+        blob,
+        filename,
+        issuanceId,
+      } = await api.issueWithCredIssuer(
+        beneficiary.internal_record_id,
+        authId,
+        vcType || undefined,
+      );
+
+      // Download the PDF returned by the backend.
+      const url = URL.createObjectURL(blob);
+
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+
+      URL.revokeObjectURL(url);
+
+      setIssued({
+        filename,
+        issuanceId,
+      });
+
       setStage("done");
     } catch (e) {
       setError((e as ApiError).message);
@@ -180,27 +309,29 @@ export default function IssueFlow() {
     <div className="card-stack">
       <section className="card">
         <h2>1 · Find the beneficiary</h2>
-        {/* The credential is chosen HERE, not at the issue step: each definition
-            names the registry view the beneficiary is looked up through, so the
-            choice has to be made before the lookup runs. Locked once a record is
-            resolved -- changing it then would leave a record found in one view
-            about to be issued against another. */}
+
+        {/* The credential is chosen HERE, not at the issue step. */}
         {vcTypes.length > 1 && (
           <label>
             Credential
+
             <select
               value={vcType}
               onChange={(e) => setVcType(e.target.value)}
               disabled={busy || stage !== "lookup"}
             >
               {vcTypes.map((t) => (
-                <option key={t.config_id} value={t.config_id}>
+                <option
+                  key={t.config_id}
+                  value={t.config_id}
+                >
                   {t.display_name ?? t.config_id}
                 </option>
               ))}
             </select>
           </label>
         )}
+
         <form onSubmit={onLookup} className="row">
           <input
             aria-label="National ID"
@@ -210,103 +341,147 @@ export default function IssueFlow() {
             disabled={busy || stage !== "lookup"}
             autoFocus
           />
-          <button type="submit" disabled={busy || !nationalId.trim() || stage !== "lookup"}>
+
+          <button
+            type="submit"
+            disabled={
+              busy ||
+              !nationalId.trim() ||
+              stage !== "lookup"
+            }
+          >
             Look up
           </button>
         </form>
+
         {beneficiary && (
           <dl className="facts">
             <dt>Record</dt>
-            <dd>{beneficiary.record_name ?? beneficiary.internal_record_id}</dd>
+            <dd>
+              {beneficiary.record_name ??
+                beneficiary.internal_record_id}
+            </dd>
+
             <dt>Status</dt>
-            <dd>{beneficiary.eligible ? "Eligible" : (beneficiary.reason ?? "Not eligible")}</dd>
+            <dd>
+              {beneficiary.eligible
+                ? "Eligible"
+                : (
+                  beneficiary.reason ??
+                  "Not eligible"
+                )}
+            </dd>
           </dl>
         )}
       </section>
 
-      <section className="card" aria-disabled={stage === "lookup"}>
+      <section
+        className="card"
+        aria-disabled={stage === "lookup"}
+      >
         <h2>2 · Beneficiary authenticates</h2>
+
         <p className="muted">
-          The beneficiary authenticates themselves — by fingerprint at this counter, or
-          with a one-time code sent to their phone. A credential cannot be issued
-          without it.
+          The beneficiary authenticates themselves — by fingerprint
+          at this counter, or with a one-time code sent to their phone.
+          A credential cannot be issued without it.
         </p>
-        <button onClick={onAuthenticate} disabled={busy || !beneficiary?.eligible || stage === "lookup"}>
-          {authId ? "Restart authentication" : "Start authentication"}
+
+        <button
+          onClick={onAuthenticate}
+          disabled={
+            busy ||
+            !beneficiary?.eligible ||
+            stage === "lookup"
+          }
+        >
+          {authId
+            ? "Restart authentication"
+            : "Start authentication"}
         </button>
+
         {status && (
-          <p className={status.authorised ? "ok" : "pending"}>
+          <p
+            className={
+              status.authorised
+                ? "ok"
+                : "pending"
+            }
+          >
             {status.authorised
               ? `Authenticated — ${status.expires_in_seconds}s remaining to issue`
-              : `Waiting… (${status.status})${status.reason ? ` — ${status.reason}` : ""}`}
+              : `Waiting… (${status.status})${
+                  status.reason
+                    ? ` — ${status.reason}`
+                    : ""
+                }`}
           </p>
         )}
       </section>
 
-      <section className="card" aria-disabled={stage !== "issue" && stage !== "done"}>
+      <section
+        className="card"
+        aria-disabled={
+          stage !== "issue" &&
+          stage !== "done"
+        }
+      >
         <h2>3 · Issue and print</h2>
-        <button onClick={onIssue} disabled={busy || stage !== "issue"}>
+
+        <button
+          onClick={onIssue}
+          disabled={
+            busy ||
+            stage !== "issue"
+          }
+        >
           Download credential
         </button>
-        <h2>CredIssuer Credential</h2>
-        <button onClick={onCredIssuerIssue} disabled={busy || stage !== "issue"}>
-          Download credential
+
+        <h2>Credential via CredIssuer</h2>
+
+        <button
+          onClick={onCredIssuerIssue}
+          disabled={
+            busy ||
+            stage !== "issue"
+          }
+        >
+          Issue with CredIssuer & Download
         </button>
+
         {issued && (
           <p className="ok">
-            Downloaded <strong>{issued.filename}</strong>. Print it and hand it to the
-            beneficiary.
+            Downloaded{" "}
+            <strong>{issued.filename}</strong>.
+            Print it and hand it to the beneficiary.
+
             <br />
-            <span className="muted">Issuance {issued.issuanceId}</span>
+
+            <span className="muted">
+              Issuance {issued.issuanceId}
+            </span>
           </p>
         )}
       </section>
 
-      {error && <p className="error" role="alert">{error}</p>}
+      {error && (
+        <p
+          className="error"
+          role="alert"
+        >
+          {error}
+        </p>
+      )}
+
       {(beneficiary || error) && (
-        <button className="link" onClick={reset}>
+        <button
+          className="link"
+          onClick={reset}
+        >
           Start over
         </button>
       )}
     </div>
   );
-}
-
-async function onCredIssuerIssue() {
-  if (!beneficiary) return;
-
-  setBusy(true);
-  setError("");
-
-  try {
-    const { blob, filename, issuanceId } =
-      await api.issueWithCredIssuer(
-        beneficiary.internal_record_id,
-        authId,
-        vcType || undefined,
-      );
-
-    // Download the PDF returned by the backend.
-    const url = URL.createObjectURL(blob);
-
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-
-    URL.revokeObjectURL(url);
-
-    setIssued({
-      filename,
-      issuanceId,
-    });
-
-    setStage("done");
-  } catch (e) {
-    setError((e as ApiError).message);
-  } finally {
-    setBusy(false);
-  }
 }
