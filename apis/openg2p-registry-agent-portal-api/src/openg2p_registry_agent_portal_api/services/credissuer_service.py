@@ -62,15 +62,6 @@ class CredIssuerService(BaseService):
             60,
         )
 
-        # Use the CA bundle already configured in the container.
-        # curl inside the pod successfully validates CredIssuer using
-        # this CA bundle.
-        self.ca_bundle = getattr(
-            _config,
-            "credential_api_ca_bundle",
-            "/opt/truststore/ca.crt",
-        )
-
         # Fallback photo used when a claim does not include one.
         # Resolution order (Kubernetes-friendly):
         #   1. CREDENTIAL_API_DEFAULT_PHOTO_PATH - path to a file mounted
@@ -99,13 +90,12 @@ class CredIssuerService(BaseService):
         _logger.info(
             "CredIssuerService initialized: base_url=%s, "
             "template_id=%s, org_code=%s, issuer_email=%s, "
-            "timeout=%s, ca_bundle=%s, default_photo_configured=%s",
+            "timeout=%s, default_photo_configured=%s",
             self.base_url,
             self.template_id,
             self.org_code,
             self.issuer_email,
             self.timeout,
-            self.ca_bundle,
             bool(self.default_photo),
         )
 
@@ -470,7 +460,6 @@ class CredIssuerService(BaseService):
             async with httpx.AsyncClient(
                 timeout=self.timeout,
                 follow_redirects=True,
-                verify=self.ca_bundle,
             ) as client:
                 response = await client.get(file_path)
 
@@ -573,7 +562,6 @@ class CredIssuerService(BaseService):
             async with httpx.AsyncClient(
                 timeout=self.timeout,
                 follow_redirects=True,
-                verify=self.ca_bundle,
             ) as client:
                 response = await client.request(
                     method=method,
