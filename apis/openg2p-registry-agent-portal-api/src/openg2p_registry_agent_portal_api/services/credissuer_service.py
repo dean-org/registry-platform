@@ -824,12 +824,13 @@ class CredIssuerService(BaseService):
             # Photo can be either a string (base64) or already an object
             if isinstance(claim_photo, str):
                 # Convert base64 string to CredIssuer's expected format
+                photo_size = len(claim_photo.encode('utf-8')) if isinstance(claim_photo, str) else len(claim_photo)
                 credential_data["photo"] = [
                     {
                         "storage": "base64",
                         "name": "credential_photo.png",
                         "url": f"data:image/png;base64,{claim_photo}",
-                        "size": len(claim_photo),
+                        "size": photo_size,
                         "type": "image/png",
                         "originalName": "credential_photo.png",
                         "hash": ""
@@ -845,12 +846,13 @@ class CredIssuerService(BaseService):
                 claims.get("functionalRecordId"),
             )
             # Convert default photo string to CredIssuer's expected format
+            photo_size = len(self.default_photo.encode('utf-8')) if isinstance(self.default_photo, str) else len(self.default_photo)
             credential_data["photo"] = [
                 {
                     "storage": "base64",
                     "name": "default_photo.png",
                     "url": f"data:image/png;base64,{self.default_photo}",
-                    "size": len(self.default_photo),
+                    "size": photo_size,
                     "type": "image/png",
                     "originalName": "default_photo.png",
                     "hash": ""
