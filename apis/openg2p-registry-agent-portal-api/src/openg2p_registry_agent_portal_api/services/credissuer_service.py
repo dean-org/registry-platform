@@ -786,14 +786,41 @@ class CredIssuerService(BaseService):
         claim_photo = claims.get("photo")
 
         if claim_photo is not None:
-            credential_data["photo"] = claim_photo
+            # Photo can be either a string (base64) or already an object
+            if isinstance(claim_photo, str):
+                # Convert base64 string to CredIssuer's expected format
+                credential_data["photo"] = [
+                    {
+                        "storage": "base64",
+                        "name": "credential_photo.png",
+                        "url": f"data:image/png;base64,{claim_photo}",
+                        "size": len(claim_photo),
+                        "type": "image/png",
+                        "originalName": "credential_photo.png",
+                        "hash": ""
+                    }
+                ]
+            else:
+                # Already an object, use as-is
+                credential_data["photo"] = claim_photo
         elif self.default_photo:
             _logger.info(
                 "Photo not present in claims for functionalRecordId=%s; "
                 "using default photo from environment configuration.",
                 claims.get("functionalRecordId"),
             )
-            credential_data["photo"] = self.default_photo
+            # Convert default photo string to CredIssuer's expected format
+            credential_data["photo"] = [
+                {
+                    "storage": "base64",
+                    "name": "default_photo.png",
+                    "url": f"data:image/png;base64,{self.default_photo}",
+                    "size": len(self.default_photo),
+                    "type": "image/png",
+                    "originalName": "default_photo.png",
+                    "hash": ""
+                }
+            ]
 
         return {
             key: value
