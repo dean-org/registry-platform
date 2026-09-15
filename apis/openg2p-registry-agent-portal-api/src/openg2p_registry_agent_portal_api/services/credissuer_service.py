@@ -39,6 +39,11 @@ class CredIssuerService(BaseService):
         subCountry   = Central
         farmerGroup  = Green Farmers Co-op
 
+    Hardcoded credential values:
+        NID      = functionalRecordId
+        email    = nudili@denipl.net
+        district = Ganlulu
+
     Default photo:
         Loaded from CREDENTIAL_API_DEFAULT_PHOTO_PATH, which in the
         Kubernetes Deployment is /etc/credissuer/photo.b64 and is expected
@@ -1027,44 +1032,42 @@ class CredIssuerService(BaseService):
     ) -> Dict[str, Any]:
         """Map registry claims into the CredIssuer template.
 
-        Requested values:
-            issuanceDate = current UTC timestamp
-            expiryDate   = one year from current UTC timestamp
+        Hardcoded/requested values:
+            NID          = functionalRecordId
+            email        = nudili@denipl.net
+            district     = Ganlulu
             subCountry   = Central
             farmerGroup  = Green Farmers Co-op
-
-        NID, email and district must still come from real registry claims.
+            issuanceDate = current UTC timestamp
+            expiryDate   = one calendar year from issuance
         """
 
+        # ------------------------------------------------------------------
+        # Functional Record ID
+        # ------------------------------------------------------------------
         functional_record_id = self._required_string(
             claims,
             "functionalRecordId",
         )
 
-        # Real farmer values. No fake defaults are used.
-        nid = (
-            self._optional_string(
-                claims,
-                "NID",
-            )
-            or self._optional_string(
-                claims,
-                "nid",
-            )
-        )
+        # ------------------------------------------------------------------
+        # NID
+        # ------------------------------------------------------------------
+        # Requested behavior:
+        # NID must be exactly the functionalRecordId.
+        nid = functional_record_id
 
-        email = self._optional_string(
-            claims,
-            "email",
-        )
+        # ------------------------------------------------------------------
+        # Hardcoded email and district
+        # ------------------------------------------------------------------
+        email = "nudili@denipl.net"
+        district = "Ganlulu"
 
-        district = self._optional_string(
-            claims,
-            "district",
-        )
-
-        # Keep existing behavior: if farmerID is not supplied, use the
-        # functional record ID as farmerID.
+        # ------------------------------------------------------------------
+        # Farmer ID
+        # ------------------------------------------------------------------
+        # Keep existing behavior. If farmerID is not present, use
+        # functionalRecordId.
         farmer_id = (
             self._optional_string(
                 claims,
@@ -1081,16 +1084,28 @@ class CredIssuerService(BaseService):
             or functional_record_id
         )
 
-        # IMPORTANT:
-        # Always generate these at issuance time instead of relying on
-        # missing claims.
+        # ------------------------------------------------------------------
+        # Issuance date
+        # ------------------------------------------------------------------
+        # Example:
+        # 2026-09-15T18:15:30.123Z
         issuance_date = self._current_utc_iso()
+
+        # ------------------------------------------------------------------
+        # Expiry date
+        # ------------------------------------------------------------------
+        # One calendar year after issuance.
         expiry_date = self._one_year_from_now_iso()
 
-        # Requested hard-coded values.
+        # ------------------------------------------------------------------
+        # Hardcoded country/group
+        # ------------------------------------------------------------------
         sub_country = "Central"
         farmer_group = "Green Farmers Co-op"
 
+        # ------------------------------------------------------------------
+        # Credential data
+        # ------------------------------------------------------------------
         credential_data: Dict[str, Any] = {
             "NID": nid,
             "email": email,
@@ -1102,9 +1117,15 @@ class CredIssuerService(BaseService):
             "issuanceDate": issuance_date,
         }
 
-        # Photo:
-        # 1. Use claims["photo"] if supplied.
-        # 2. Otherwise use the photo loaded from the Kubernetes Secret.
+        # ------------------------------------------------------------------
+        # Photo
+        # ------------------------------------------------------------------
+        # Priority:
+        #   1. Photo supplied in claims
+        #   2. Kubernetes Secret-mounted default photo
+        #
+        # CREDENTIAL_API_DEFAULT_PHOTO_PATH should point to:
+        # /etc/credissuer/photo.b64
         claim_photo = claims.get(
             "photo"
         )
@@ -1116,6 +1137,7 @@ class CredIssuerService(BaseService):
                     "credential_photo.png",
                 )
             )
+
         elif self.default_photo:
             _logger.info(
                 "Photo not present in claims for "
@@ -1131,7 +1153,16 @@ class CredIssuerService(BaseService):
                 )
             )
 
-        # Remove missing values.
+        else:
+            _logger.warning(
+                "No photo available for "
+                "functionalRecordId=%s.",
+                functional_record_id,
+            )
+
+        # ------------------------------------------------------------------
+        # Remove empty values
+        # ------------------------------------------------------------------
         credential_data = {
             key: value
             for key, value in credential_data.items()
@@ -1139,9 +1170,9 @@ class CredIssuerService(BaseService):
             and value != ""
         }
 
-        # These are still required by the current CredIssuer template.
-        # issuanceDate, expiryDate, subCountry and farmerGroup are guaranteed
-        # above; NID/email/district must be present in the real claims.
+        # ------------------------------------------------------------------
+        # Validate required fields
+        # ------------------------------------------------------------------
         required_template_fields = {
             "NID",
             "email",
@@ -1185,6 +1216,9 @@ class CredIssuerService(BaseService):
             "CredIssuer credential dates/defaults prepared: "
             "functionalRecordId=%s, issuanceDate=%s, "
             "expiryDate=%s, subCountry=%s, farmerGroup=%s, "
+            "nid_source=functionalRecordId, "
+            "email_source=hardcoded, "
+            "district_source=hardcoded, "
             "photo_configured=%s",
             functional_record_id,
             issuance_date,
@@ -1227,9 +1261,12 @@ class CredIssuerService(BaseService):
             expiry = now.replace(
                 year=now.year + 1
             )
+
         except ValueError:
+            # February 29 -> February 28 in a non-leap year.
             expiry = now.replace(
                 year=now.year + 1,
+                month=2,
                 day=28,
             )
 
@@ -1351,6 +1388,7 @@ class CredIssuerService(BaseService):
                 )[0]
                 or "image/png"
             )
+
         else:
             data_url = (
                 "data:image/png;base64,"
