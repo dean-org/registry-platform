@@ -2,6 +2,7 @@ import asyncio
 import logging
 import os
 import time
+from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
 import httpx
@@ -31,6 +32,17 @@ class CredIssuerService(BaseService):
         3. Retrieve the issued credential using transaction_id.
         4. Create a PDF presentation.
         5. Download the generated PDF.
+
+    Credential date/default values:
+        issuanceDate = current UTC timestamp
+        expiryDate   = one calendar year from current UTC timestamp
+        subCountry   = Central
+        farmerGroup  = Green Farmers Co-op
+
+    Default photo:
+        Loaded from CREDENTIAL_API_DEFAULT_PHOTO_PATH, which in the
+        Kubernetes Deployment is /etc/credissuer/photo.b64 and is expected
+        to be provided by the credissuer-default-photo Secret.
     """
 
     def __init__(self, **kwargs):
@@ -113,7 +125,9 @@ class CredIssuerService(BaseService):
 
     @staticmethod
     def _load_default_photo() -> Optional[str]:
-        """Load fallback photo from file, environment, or application config."""
+        """Load fallback photo from the Kubernetes Secret-mounted file,
+        environment, or application config.
+        """
 
         photo_path = os.environ.get(
             "CREDENTIAL_API_DEFAULT_PHOTO_PATH"
@@ -789,8 +803,6 @@ class CredIssuerService(BaseService):
                 message,
             )
 
-            # Preserve the upstream HTTP status in logs,
-            # while exposing the application-level error.
             code = (
                 "G2P-VC-502"
                 if response.status_code == 400
@@ -817,7 +829,7 @@ class CredIssuerService(BaseService):
             "token",
             "authorization",
             "dateofbirth",
-            "fullName".lower(),
+            "fullname",
         }
 
         def _scrub(
@@ -918,15 +930,6 @@ class CredIssuerService(BaseService):
                 body,
                 dict,
             ):
-                # Common response structure:
-                #
-                # {
-                #   "response_header": {
-                #       "response_status": "ERROR",
-                #       "response_error_code": "...",
-                #       "response_error_message": "..."
-                #   }
-                # }
                 response_header = body.get(
                     "response_header"
                 )
@@ -1024,30 +1027,13 @@ class CredIssuerService(BaseService):
     ) -> Dict[str, Any]:
         """Map registry claims into the CredIssuer template.
 
-        IMPORTANT:
-        Do not manufacture credential values such as N/A, empty strings,
-        fake dates, or functionalRecordId-as-NID. CredIssuer validates the
-        actual credential values against the configured template.
+        Requested values:
+            issuanceDate = current UTC timestamp
+            expiryDate   = one year from current UTC timestamp
+            subCountry   = Central
+            farmerGroup  = Green Farmers Co-op
 
-        The current registry log shows these source fields:
-            functionalRecordId
-            fullName
-            dateOfBirth
-            gender
-
-        The CredIssuer template used by this deployment appears to expose:
-            NID
-            email
-            district
-            farmerID
-            expiryDate
-            subCountry
-            farmerGroup
-            issuanceDate
-            photo
-
-        Therefore this method expects the controller/registry layer to supply
-        the actual values needed by that template.
+        NID, email and district must still come from real registry claims.
         """
 
         functional_record_id = self._required_string(
@@ -1055,17 +1041,17 @@ class CredIssuerService(BaseService):
             "functionalRecordId",
         )
 
-        # These are deliberately not replaced with fake defaults.
-        nid = self._optional_string(
-            claims,
-            "NID",
-        )
-
-        if not nid:
-            nid = self._optional_string(
+        # Real farmer values. No fake defaults are used.
+        nid = (
+            self._optional_string(
+                claims,
+                "NID",
+            )
+            or self._optional_string(
                 claims,
                 "nid",
             )
+        )
 
         email = self._optional_string(
             claims,
@@ -1077,33 +1063,33 @@ class CredIssuerService(BaseService):
             "district",
         )
 
-        farmer_id = self._optional_string(
-            claims,
-            "farmerID",
+        # Keep existing behavior: if farmerID is not supplied, use the
+        # functional record ID as farmerID.
+        farmer_id = (
+            self._optional_string(
+                claims,
+                "farmerID",
+            )
+            or self._optional_string(
+                claims,
+                "farmerId",
+            )
+            or self._optional_string(
+                claims,
+                "farmer_id",
+            )
+            or functional_record_id
         )
 
-        if not farmer_id:
-            farmer_id = functional_record_id
+        # IMPORTANT:
+        # Always generate these at issuance time instead of relying on
+        # missing claims.
+        issuance_date = self._current_utc_iso()
+        expiry_date = self._one_year_from_now_iso()
 
-        expiry_date = self._optional_string(
-            claims,
-            "expiryDate",
-        )
-
-        sub_country = self._optional_string(
-            claims,
-            "subCountry",
-        )
-
-        farmer_group = self._optional_string(
-            claims,
-            "farmerGroup",
-        )
-
-        issuance_date = self._optional_string(
-            claims,
-            "issuanceDate",
-        )
+        # Requested hard-coded values.
+        sub_country = "Central"
+        farmer_group = "Green Farmers Co-op"
 
         credential_data: Dict[str, Any] = {
             "NID": nid,
@@ -1116,23 +1102,25 @@ class CredIssuerService(BaseService):
             "issuanceDate": issuance_date,
         }
 
+        # Photo:
+        # 1. Use claims["photo"] if supplied.
+        # 2. Otherwise use the photo loaded from the Kubernetes Secret.
         claim_photo = claims.get(
             "photo"
         )
 
-        if claim_photo is not None:
+        if claim_photo:
             credential_data["photo"] = (
                 self._build_photo_value(
                     claim_photo,
                     "credential_photo.png",
                 )
             )
-
         elif self.default_photo:
             _logger.info(
                 "Photo not present in claims for "
-                "functionalRecordId=%s; using configured "
-                "default photo.",
+                "functionalRecordId=%s; using default "
+                "photo from CREDENTIAL_API_DEFAULT_PHOTO_PATH.",
                 functional_record_id,
             )
 
@@ -1143,15 +1131,7 @@ class CredIssuerService(BaseService):
                 )
             )
 
-        # Remove only missing optional values.
-        #
-        # Do NOT send:
-        #   ""
-        #   "N/A"
-        #   null
-        #
-        # unless those are explicitly valid values in the CredIssuer
-        # template.
+        # Remove missing values.
         credential_data = {
             key: value
             for key, value in credential_data.items()
@@ -1159,11 +1139,9 @@ class CredIssuerService(BaseService):
             and value != ""
         }
 
-        # The most important validation happens here. This prevents an
-        # obviously invalid request from reaching CredIssuer.
-        #
-        # Adjust this set if the actual CredIssuer template has a different
-        # required-field definition.
+        # These are still required by the current CredIssuer template.
+        # issuanceDate, expiryDate, subCountry and farmerGroup are guaranteed
+        # above; NID/email/district must be present in the real claims.
         required_template_fields = {
             "NID",
             "email",
@@ -1203,7 +1181,64 @@ class CredIssuerService(BaseService):
                 ),
             )
 
+        _logger.info(
+            "CredIssuer credential dates/defaults prepared: "
+            "functionalRecordId=%s, issuanceDate=%s, "
+            "expiryDate=%s, subCountry=%s, farmerGroup=%s, "
+            "photo_configured=%s",
+            functional_record_id,
+            issuance_date,
+            expiry_date,
+            sub_country,
+            farmer_group,
+            "photo" in credential_data,
+        )
+
         return credential_data
+
+    @staticmethod
+    def _current_utc_iso() -> str:
+        """Return current UTC timestamp as YYYY-MM-DDTHH:MM:SS.mmmZ."""
+
+        now = datetime.now(
+            timezone.utc
+        )
+
+        return (
+            now.strftime(
+                "%Y-%m-%dT%H:%M:%S."
+            )
+            + f"{now.microsecond // 1000:03d}Z"
+        )
+
+    @staticmethod
+    def _one_year_from_now_iso() -> str:
+        """Return current UTC timestamp plus one calendar year.
+
+        If today is February 29 and the next year is not a leap year,
+        February 28 is used.
+        """
+
+        now = datetime.now(
+            timezone.utc
+        )
+
+        try:
+            expiry = now.replace(
+                year=now.year + 1
+            )
+        except ValueError:
+            expiry = now.replace(
+                year=now.year + 1,
+                day=28,
+            )
+
+        return (
+            expiry.strftime(
+                "%Y-%m-%dT%H:%M:%S."
+            )
+            + f"{expiry.microsecond // 1000:03d}Z"
+        )
 
     @staticmethod
     def _required_string(
@@ -1271,7 +1306,7 @@ class CredIssuerService(BaseService):
         photo: Any,
         filename: str,
     ) -> Any:
-        """Convert a photo claim into the expected attachment structure."""
+        """Convert a photo into the expected base64 attachment structure."""
 
         if isinstance(
             photo,
@@ -1302,21 +1337,27 @@ class CredIssuerService(BaseService):
                 "Credential photo cannot be empty.",
             )
 
-        # If the caller already supplied a data URI, do not prepend
-        # another data URI prefix.
+        # Keep an existing data URI unchanged.
         if photo.startswith(
             "data:"
         ):
             data_url = photo
+
+            # Extract MIME type from the data URI.
+            mime_type = (
+                photo[5:].split(
+                    ";",
+                    1,
+                )[0]
+                or "image/png"
+            )
         else:
             data_url = (
                 "data:image/png;base64,"
                 f"{photo}"
             )
+            mime_type = "image/png"
 
-        # Size here is the size of the encoded string. If the CredIssuer
-        # template expects decoded binary size instead, this should instead
-        # be calculated with base64.b64decode().
         photo_size = len(
             photo.encode(
                 "utf-8"
@@ -1329,7 +1370,7 @@ class CredIssuerService(BaseService):
                 "name": filename,
                 "url": data_url,
                 "size": photo_size,
-                "type": "image/png",
+                "type": mime_type,
                 "originalName": filename,
                 "hash": "",
             }
