@@ -39,14 +39,35 @@ class CredIssuerService(BaseService):
         ).rstrip("/")
 
         self.token = getattr(_config, "credential_api_token", None)
-        self.template_id = getattr(_config, "credential_api_template_id", None)
-        self.org_code = getattr(_config, "credential_api_org_code", None)
-        self.issuer_email = getattr(_config, "credential_api_issuer_email", None)
+        self.template_id = getattr(
+            _config,
+            "credential_api_template_id",
+            None,
+        )
+        self.org_code = getattr(
+            _config,
+            "credential_api_org_code",
+            None,
+        )
+        self.issuer_email = getattr(
+            _config,
+            "credential_api_issuer_email",
+            None,
+        )
 
         self.timeout = getattr(
             _config,
             "credential_api_http_timeout",
             60,
+        )
+
+        # Use the CA bundle already configured in the container.
+        # curl inside the pod successfully validates CredIssuer using
+        # this CA bundle.
+        self.ca_bundle = getattr(
+            _config,
+            "credential_api_ca_bundle",
+            "/opt/truststore/ca.crt",
         )
 
         if not self.token:
@@ -55,20 +76,23 @@ class CredIssuerService(BaseService):
             )
 
         _logger.info(
-            "CredIssuerService initialized: base_url=%s, template_id=%s, "
-            "org_code=%s, issuer_email=%s, timeout=%s",
+            "CredIssuerService initialized: base_url=%s, "
+            "template_id=%s, org_code=%s, issuer_email=%s, "
+            "timeout=%s, ca_bundle=%s",
             self.base_url,
             self.template_id,
             self.org_code,
             self.issuer_email,
             self.timeout,
+            self.ca_bundle,
         )
 
     async def issue(self, claims: Dict[str, Any]) -> Dict[str, Any]:
         """Issue a credential and return the generated PDF information."""
 
         _logger.info(
-            "Starting CredIssuer credential issuance: functionalRecordId=%s",
+            "Starting CredIssuer credential issuance: "
+            "functionalRecordId=%s",
             claims.get("functionalRecordId"),
         )
 
@@ -157,8 +181,8 @@ class CredIssuerService(BaseService):
 
         if not credential_id:
             _logger.error(
-                "CredIssuer credential response did not contain credential_id: "
-                "transaction_id=%s",
+                "CredIssuer credential response did not contain "
+                "credential_id: transaction_id=%s",
                 transaction_id,
             )
 
@@ -291,7 +315,8 @@ class CredIssuerService(BaseService):
             f"{self.base_url}/credentials/issued/{transaction_id}"
             "?offset=0"
             "&limit=10"
-            "&statuses=Failed,Revoked,Issued,Notified,Printed,Printed_and_Notified"
+            "&statuses=Failed,Revoked,Issued,Notified,Printed,"
+            "Printed_and_Notified"
         )
 
         _logger.info(
@@ -385,6 +410,7 @@ class CredIssuerService(BaseService):
             async with httpx.AsyncClient(
                 timeout=self.timeout,
                 follow_redirects=True,
+                verify=self.ca_bundle,
             ) as client:
                 response = await client.get(file_path)
 
@@ -439,7 +465,6 @@ class CredIssuerService(BaseService):
 
         if not response.content:
             raise CredIssuerError(
-                "G2P-VC-503",
                 "CredIssuer returned an empty PDF.",
             )
 
@@ -454,6 +479,7 @@ class CredIssuerService(BaseService):
         """Make an authenticated request to CredIssuer."""
 
         token = self.token.strip()
+
         if not token.lower().startswith("bearer "):
             token = f"Bearer {token}"
 
@@ -479,6 +505,7 @@ class CredIssuerService(BaseService):
             async with httpx.AsyncClient(
                 timeout=self.timeout,
                 follow_redirects=True,
+                verify=self.ca_bundle,
             ) as client:
                 response = await client.request(
                     method=method,
