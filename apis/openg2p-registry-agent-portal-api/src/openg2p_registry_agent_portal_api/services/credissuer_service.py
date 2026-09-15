@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import os
 import time
@@ -359,54 +360,83 @@ class CredIssuerService(BaseService):
         self,
         transaction_id: str,
     ) -> Dict[str, Any]:
-        """Retrieve the credential created by the issuance transaction."""
+        """Retrieve the credential created by the issuance transaction.
+        
+        With retries to handle CredIssuer processing delays.
+        """
 
-        url = (
-            f"{self.base_url}/credentials/issued/{transaction_id}"
-            "?offset=0"
-            "&limit=10"
-            "&statuses=Failed,Revoked,Issued,Notified,Printed,"
-            "Printed_and_Notified"
-        )
+        url_base = f"{self.base_url}/credentials/issued/{transaction_id}"
 
-        _logger.info(
-            "Calling CredIssuer transaction API: "
-            "GET /credentials/issued/%s",
-            transaction_id,
-        )
-
-        response = await self._request(
-            method="GET",
-            url=url,
-        )
-
-        body = self._json(
-            response,
-            "Could not retrieve the issued credential from CredIssuer",
-        )
-
-        results = body.get("results") or []
-
-        _logger.info(
-            "CredIssuer transaction API successful: transaction_id=%s, "
-            "result_count=%d, status=%s",
-            transaction_id,
-            len(results),
-            body.get("status"),
-        )
-
-        if results:
-            credential = results[0]
-
-            _logger.info(
-                "CredIssuer transaction result: transaction_id=%s, "
-                "credential_id=%s, credential_status=%s",
-                transaction_id,
-                credential.get("credential_id"),
-                credential.get("status"),
+        # Retry up to 3 times with delay for CredIssuer to process
+        max_retries = 3
+        retry_delay = 2  # seconds
+        
+        for attempt in range(max_retries):
+            url = (
+                f"{url_base}"
+                "?offset=0"
+                "&limit=10"
+                "&statuses=Failed,Revoked,Issued,Notified,Printed,"
+                "Printed_and_Notified"
             )
 
-        return body
+            _logger.info(
+                "Calling CredIssuer transaction API (attempt %d/%d): "
+                "GET /credentials/issued/%s",
+                attempt + 1,
+                max_retries,
+                transaction_id,
+            )
+
+            try:
+                response = await self._request(
+                    method="GET",
+                    url=url,
+                )
+
+                body = self._json(
+                    response,
+                    "Could not retrieve the issued credential from CredIssuer",
+                )
+
+                results = body.get("results") or []
+
+                _logger.info(
+                    "CredIssuer transaction API successful: transaction_id=%s, "
+                    "result_count=%d, status=%s",
+                    transaction_id,
+                    len(results),
+                    body.get("status"),
+                )
+
+                if results:
+                    credential = results[0]
+
+                    _logger.info(
+                        "CredIssuer transaction result: transaction_id=%s, "
+                        "credential_id=%s, credential_status=%s",
+                        transaction_id,
+                        credential.get("credential_id"),
+                        credential.get("status"),
+                    )
+
+                return body
+
+            except CredIssuerError as error:
+                # If it's a 404 and we have retries left, wait and retry
+                if "Credential Transaction Log not found" in str(error.message) and attempt < max_retries - 1:
+                    _logger.warning(
+                        "Credential transaction log not yet available (attempt %d/%d), "
+                        "retrying in %d seconds... transaction_id=%s",
+                        attempt + 1,
+                        max_retries,
+                        retry_delay,
+                        transaction_id,
+                    )
+                    await asyncio.sleep(retry_delay)
+                    continue
+                # Otherwise raise the error
+                raise
 
     async def _create_pdf_presentation(
         self,
