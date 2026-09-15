@@ -40,19 +40,16 @@ class CredIssuerService(BaseService):
         ).rstrip("/")
 
         self.token = getattr(_config, "credential_api_token", None)
-
         self.template_id = getattr(
             _config,
             "credential_api_template_id",
             None,
         )
-
         self.org_code = getattr(
             _config,
             "credential_api_org_code",
             None,
         )
-
         self.issuer_email = getattr(
             _config,
             "credential_api_issuer_email",
@@ -65,35 +62,90 @@ class CredIssuerService(BaseService):
             60,
         )
 
-        # CA bundle mounted by Kubernetes.
-        #
-        # Configure this through:
-        # CREDENTIAL_API_CA_BUNDLE=/etc/credissuer-ca/ca.crt
-        #
-        # The environment variable is preferred so the CA mount path
-        # can be different between dev/staging/prod.
-        self.ca_bundle = os.getenv(
-            "CREDENTIAL_API_CA_BUNDLE",
-            "/etc/credissuer-ca/ca.crt",
+        # Use the CA bundle already configured in the container.
+        # curl inside the pod successfully validates CredIssuer using
+        # this CA bundle.
+        self.ca_bundle = getattr(
+            _config,
+            "credential_api_ca_bundle",
+            "/opt/truststore/ca.crt",
         )
+
+        # Fallback photo used when a claim does not include one.
+        # Resolution order (Kubernetes-friendly):
+        #   1. CREDENTIAL_API_DEFAULT_PHOTO_PATH - path to a file mounted
+        #      from a ConfigMap/Secret volume (recommended for large
+        #      base64 photo blobs, since env vars have size limits).
+        #   2. CREDENTIAL_API_DEFAULT_PHOTO - the photo value directly
+        #      as an environment variable (e.g. injected from a Secret
+        #      via `env`/`envFrom` in the pod spec).
+        #   3. credential_api_default_photo on the app Settings object,
+        #      if you'd rather wire it through your config layer.
+        self.default_photo = self._load_default_photo()
 
         if not self.token:
             _logger.warning(
                 "CredIssuer API token is not configured."
             )
 
+        if not self.default_photo:
+            _logger.info(
+                "No default photo configured (CREDENTIAL_API_DEFAULT_PHOTO"
+                " / CREDENTIAL_API_DEFAULT_PHOTO_PATH not set); "
+                "credentials without a photo claim will omit the photo "
+                "field."
+            )
+
         _logger.info(
             "CredIssuerService initialized: base_url=%s, "
             "template_id=%s, org_code=%s, issuer_email=%s, "
-            "timeout=%s, ca_bundle=%s, ca_exists=%s",
+            "timeout=%s, ca_bundle=%s, default_photo_configured=%s",
             self.base_url,
             self.template_id,
             self.org_code,
             self.issuer_email,
             self.timeout,
             self.ca_bundle,
-            os.path.exists(self.ca_bundle),
+            bool(self.default_photo),
         )
+
+    @staticmethod
+    def _load_default_photo() -> Optional[str]:
+        """Resolve the fallback photo from a mounted file, env var, or config."""
+
+        photo_path = os.environ.get("CREDENTIAL_API_DEFAULT_PHOTO_PATH")
+
+        if photo_path:
+            try:
+                with open(photo_path, "r", encoding="utf-8") as fh:
+                    content = fh.read().strip()
+
+                if content:
+                    _logger.info(
+                        "Loaded default photo from file: %s",
+                        photo_path,
+                    )
+                    return content
+
+                _logger.warning(
+                    "CREDENTIAL_API_DEFAULT_PHOTO_PATH points to an "
+                    "empty file: %s",
+                    photo_path,
+                )
+
+            except OSError:
+                _logger.exception(
+                    "Could not read default photo file at "
+                    "CREDENTIAL_API_DEFAULT_PHOTO_PATH=%s",
+                    photo_path,
+                )
+
+        env_photo = os.environ.get("CREDENTIAL_API_DEFAULT_PHOTO")
+
+        if env_photo:
+            return env_photo
+
+        return getattr(_config, "credential_api_default_photo", None)
 
     async def issue(self, claims: Dict[str, Any]) -> Dict[str, Any]:
         """Issue a credential and return the generated PDF information."""
@@ -692,8 +744,17 @@ class CredIssuerService(BaseService):
             "issuanceDate": claims.get("issuanceDate"),
         }
 
-        if "photo" in claims:
-            credential_data["photo"] = claims["photo"]
+        claim_photo = claims.get("photo")
+
+        if claim_photo is not None:
+            credential_data["photo"] = claim_photo
+        elif self.default_photo:
+            _logger.info(
+                "Photo not present in claims for functionalRecordId=%s; "
+                "using default photo from environment configuration.",
+                claims.get("functionalRecordId"),
+            )
+            credential_data["photo"] = self.default_photo
 
         return {
             key: value
