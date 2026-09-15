@@ -559,6 +559,14 @@ class CredIssuerService(BaseService):
             safe_url,
         )
 
+        if json is not None:
+            _logger.debug(
+                "CredIssuer API request body: method=%s, endpoint=%s, body=%s",
+                method,
+                safe_url,
+                self._safe_body(json),
+            )
+
         started = time.monotonic()
 
         try:
@@ -643,6 +651,49 @@ class CredIssuerService(BaseService):
         )
 
         return response
+
+    @staticmethod
+    def _safe_body(body: Any) -> Any:
+        """Return a copy of a request body safe to write to logs.
+
+        Masks fields that are large or sensitive (photo blobs, NID,
+        email, auth tokens) so full request bodies can be logged at
+        debug level without leaking PII or bloating log storage.
+        """
+
+        redact_keys = {
+            "photo",
+            "nid",
+            "email",
+            "token",
+            "authorization",
+        }
+
+        def _scrub(value: Any) -> Any:
+            if isinstance(value, dict):
+                scrubbed = {}
+
+                for key, val in value.items():
+                    if key.lower() in redact_keys and val is not None:
+                        if isinstance(val, str):
+                            scrubbed[key] = f"<redacted:{len(val)} chars>"
+                        else:
+                            scrubbed[key] = "<redacted>"
+                    else:
+                        scrubbed[key] = _scrub(val)
+
+                return scrubbed
+
+            if isinstance(value, list):
+                return [_scrub(item) for item in value]
+
+            return value
+
+        try:
+            return _scrub(body)
+
+        except Exception:
+            return "<unavailable>"
 
     @staticmethod
     def _json(
