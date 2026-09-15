@@ -1,4 +1,5 @@
 import logging
+import os
 import time
 from typing import Any, Dict, Optional
 
@@ -39,16 +40,19 @@ class CredIssuerService(BaseService):
         ).rstrip("/")
 
         self.token = getattr(_config, "credential_api_token", None)
+
         self.template_id = getattr(
             _config,
             "credential_api_template_id",
             None,
         )
+
         self.org_code = getattr(
             _config,
             "credential_api_org_code",
             None,
         )
+
         self.issuer_email = getattr(
             _config,
             "credential_api_issuer_email",
@@ -61,13 +65,16 @@ class CredIssuerService(BaseService):
             60,
         )
 
-        # Use the CA bundle already configured in the container.
-        # curl inside the pod successfully validates CredIssuer using
-        # this CA bundle.
-        self.ca_bundle = getattr(
-            _config,
-            "credential_api_ca_bundle",
-            "/opt/truststore/ca.crt",
+        # CA bundle mounted by Kubernetes.
+        #
+        # Configure this through:
+        # CREDENTIAL_API_CA_BUNDLE=/etc/credissuer-ca/ca.crt
+        #
+        # The environment variable is preferred so the CA mount path
+        # can be different between dev/staging/prod.
+        self.ca_bundle = os.getenv(
+            "CREDENTIAL_API_CA_BUNDLE",
+            "/etc/credissuer-ca/ca.crt",
         )
 
         if not self.token:
@@ -78,13 +85,14 @@ class CredIssuerService(BaseService):
         _logger.info(
             "CredIssuerService initialized: base_url=%s, "
             "template_id=%s, org_code=%s, issuer_email=%s, "
-            "timeout=%s, ca_bundle=%s",
+            "timeout=%s, ca_bundle=%s, ca_exists=%s",
             self.base_url,
             self.template_id,
             self.org_code,
             self.issuer_email,
             self.timeout,
             self.ca_bundle,
+            os.path.exists(self.ca_bundle),
         )
 
     async def issue(self, claims: Dict[str, Any]) -> Dict[str, Any]:
