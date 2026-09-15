@@ -26,8 +26,10 @@ ARG IAM_CORE_REF=develop
 # credential is rendered by cairosvg from the manifestation's SVG card design.
 RUN apk add --no-cache --virtual .build-deps gcc libc-dev linux-headers make \
  && apk add --no-cache bash git gettext libpq-dev libmagic \
+      ca-certificates \
       cairo cairo-dev pango gdk-pixbuf libffi-dev \
-      jpeg-dev zlib-dev freetype-dev
+      jpeg-dev zlib-dev freetype-dev  \
+      && update-ca-certificates
 
 WORKDIR /app
 
