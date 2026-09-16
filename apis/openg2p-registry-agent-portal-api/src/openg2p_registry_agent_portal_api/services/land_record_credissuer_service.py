@@ -30,7 +30,7 @@ class LandRecordCredIssuerService(BaseService):
     # IMPORTANT:
     # Replace this placeholder with the NEW rotated bearer token.
     # Do not commit an exposed/old token to source control.
-    CREDISSUER_TOKEN = "YOUR_NEW_ROTATED_BEARER_TOKEN"
+    CREDISSUER_TOKEN = "Bearer a7f3c9e12b84d65fa019e3c7b52a8d46f0c1be9"
 
     ORG_CODE = "FARME-OLL63"
     ISSUER_EMAIL = "rygimo@denipl.com"

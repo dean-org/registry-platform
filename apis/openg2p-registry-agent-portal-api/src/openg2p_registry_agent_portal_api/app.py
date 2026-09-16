@@ -20,7 +20,9 @@ from .services import (
     PdfRenderService,
     RegistryLookupService,
 )
-
+from .services.land_record_credissuer_service import (
+    LandRecordCredIssuerService,
+)
 _logger = logging.getLogger(_config.logging_default_logger_name)
 
 
@@ -31,6 +33,7 @@ class Initializer(BaseInitializer):
         BeneficiaryAuthService()
         CertifyIssuanceService()
         CredIssuerService()
+        LandRecordCredIssuerService()
         CredentialVerificationService()
         PdfRenderService()
         IssuanceLogService()
