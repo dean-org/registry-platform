@@ -1,4 +1,3 @@
-```python
 import asyncio
 import logging
 from typing import Any, Dict, Optional
@@ -774,4 +773,3 @@ class LandRecordCredIssuerService(BaseService):
                 return response.text[:2000]
             except Exception:
                 return "<unable to read error response>"
-```
