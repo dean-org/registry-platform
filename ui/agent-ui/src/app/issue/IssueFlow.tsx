@@ -307,6 +307,51 @@ export default function IssueFlow() {
     }
   }
 
+  async function onCredIssuerLand() {
+    const CREDISSUER_CREDENTIAL_TEMPLATE = "27C69D486BAE";
+    if (!beneficiary) return;
+
+    setBusy(true);
+    setError("");
+
+    try {
+      const {
+        blob,
+        filename,
+        issuanceId,
+      } = await api.issueWithCredIssuer(
+        beneficiary.internal_record_id,
+        authId,
+        vcType || undefined,
+        CREDISSUER_CREDENTIAL_TEMPLATE,
+      );
+
+      // Download the PDF returned by the backend.
+      const url = URL.createObjectURL(blob);
+
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+
+      URL.revokeObjectURL(url);
+
+      setIssued({
+        filename,
+        issuanceId,
+      });
+
+      setStage("done");
+    } catch (e) {
+      setError((e as ApiError).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <div className="card-stack">
       <section className="card">
@@ -444,6 +489,15 @@ export default function IssueFlow() {
 
         <button
           onClick={onCredIssuerIssue}
+          disabled={
+            busy ||
+            stage !== "issue"
+          }
+        >
+          Issue with CredIssuer & Download
+        </button>
+        <button
+          onClick={onCredIssuerLand}
           disabled={
             busy ||
             stage !== "issue"
