@@ -82,10 +82,13 @@ class CredIssuerService(BaseService):
             None,
         )
 
+        # Increased default timeout - CredIssuer issuance/retrieval/PDF
+        # calls can take a while, so give every request (issue, poll,
+        # presentation, download) more room before timing out.
         self.timeout = getattr(
             _config,
             "credential_api_http_timeout",
-            60,
+            180,
         )
 
         self.default_photo = self._load_default_photo()
@@ -1055,7 +1058,10 @@ class CredIssuerService(BaseService):
         # ------------------------------------------------------------------
         # Requested behavior:
         # NID must be exactly the functionalRecordId.
-        nid = functional_record_id
+        # NOTE: NID temporarily disabled per request - only the fields
+        # below (email, district, farmerID, expiryDate, subCountry,
+        # farmerGroup, issuanceDate) should go out in credential_data.
+        # nid = functional_record_id
 
         # ------------------------------------------------------------------
         # Hardcoded email and district
@@ -1106,8 +1112,10 @@ class CredIssuerService(BaseService):
         # ------------------------------------------------------------------
         # Credential data
         # ------------------------------------------------------------------
+        # NOTE: only the fields below are currently sent to CredIssuer.
+        # NID and photo are commented out for now - uncomment to re-enable.
         credential_data: Dict[str, Any] = {
-            "NID": nid,
+            # "NID": nid,
             "email": email,
             "district": district,
             "farmerID": farmer_id,
@@ -1126,39 +1134,42 @@ class CredIssuerService(BaseService):
         #
         # CREDENTIAL_API_DEFAULT_PHOTO_PATH should point to:
         # /etc/credissuer/photo.b64
-        claim_photo = claims.get(
-            "photo"
-        )
-
-        if claim_photo:
-            credential_data["photo"] = (
-                self._build_photo_value(
-                    claim_photo,
-                    "credential_photo.png",
-                )
-            )
-
-        elif self.default_photo:
-            _logger.info(
-                "Photo not present in claims for "
-                "functionalRecordId=%s; using default "
-                "photo from CREDENTIAL_API_DEFAULT_PHOTO_PATH.",
-                functional_record_id,
-            )
-
-            credential_data["photo"] = (
-                self._build_photo_value(
-                    self.default_photo,
-                    "default_photo.png",
-                )
-            )
-
-        else:
-            _logger.warning(
-                "No photo available for "
-                "functionalRecordId=%s.",
-                functional_record_id,
-            )
+        #
+        # NOTE: photo is commented out for now - uncomment the block
+        # below to re-enable sending a photo.
+        # claim_photo = claims.get(
+        #     "photo"
+        # )
+        #
+        # if claim_photo:
+        #     credential_data["photo"] = (
+        #         self._build_photo_value(
+        #             claim_photo,
+        #             "credential_photo.png",
+        #         )
+        #     )
+        #
+        # elif self.default_photo:
+        #     _logger.info(
+        #         "Photo not present in claims for "
+        #         "functionalRecordId=%s; using default "
+        #         "photo from CREDENTIAL_API_DEFAULT_PHOTO_PATH.",
+        #         functional_record_id,
+        #     )
+        #
+        #     credential_data["photo"] = (
+        #         self._build_photo_value(
+        #             self.default_photo,
+        #             "default_photo.png",
+        #         )
+        #     )
+        #
+        # else:
+        #     _logger.warning(
+        #         "No photo available for "
+        #         "functionalRecordId=%s.",
+        #         functional_record_id,
+        #     )
 
         # ------------------------------------------------------------------
         # Remove empty values
@@ -1173,8 +1184,10 @@ class CredIssuerService(BaseService):
         # ------------------------------------------------------------------
         # Validate required fields
         # ------------------------------------------------------------------
+        # NOTE: NID removed from the required set while it is commented
+        # out above. Add "NID" back here when it is re-enabled.
         required_template_fields = {
-            "NID",
+            # "NID",
             "email",
             "district",
             "farmerID",
