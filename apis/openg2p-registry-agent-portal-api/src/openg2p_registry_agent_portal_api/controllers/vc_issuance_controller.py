@@ -46,6 +46,9 @@ from ..services.registry_lookup_service import (
     REGISTER_ID_COLUMN,
     FOUNDATIONAL_ID_COLUMN,
 )
+from ..services.land_record_credissuer_service import (
+    LandRecordCredIssuerService,
+)
 from openg2p_registry_core.models import VcIssuanceStatusEnum
 
 _config = Settings.get_config()
@@ -86,6 +89,7 @@ class VcIssuanceController(BaseController):
         self.beneficiary_auth_service = BeneficiaryAuthService.get_component()
         self.certify_issuance_service = CertifyIssuanceService.get_component()
         self.credissuer_service = CredIssuerService.get_component()
+        self.land_record_credissuer_service = LandRecordCredIssuerService.get_component()
         self.pdf_render_service = PdfRenderService.get_component()
         self.issuance_log_service = IssuanceLogService.get_component()
         self.helper = RequestResponseHelper.get_component()
@@ -764,10 +768,15 @@ class VcIssuanceController(BaseController):
 
         # Issue through CredIssuer.
         try:
-            credential = await self.credissuer_service.issue(
-                claims,
-                credential_template=payload.credential_template,
-            )
+            if payload.credential_template == "2CC71027B1BE":
+                credential = await self.land_record_credissuer_service.issue(
+                    claims
+                )
+            else:
+                credential = await self.credissuer_service.issue(
+                    claims,
+                    credential_template=payload.credential_template,
+                )
 
         except CredIssuerError as error:
             _logger.exception(

@@ -457,7 +457,7 @@ export default function IssueFlow() {
             stage !== "issue"
           }
         >
-          Issue with CredIssuer & Download
+        Land Record
         </button>
 
         {issued && (
