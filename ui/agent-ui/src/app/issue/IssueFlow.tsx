@@ -440,7 +440,7 @@ export default function IssueFlow() {
         </button>
 
         <h2>Credential via CredIssuer</h2>
-
+        <div style={{ display: "flex", gap: "10px" }}>
         <button
           onClick={() => onCredIssuerIssue("E37907852E73")}
           disabled={
@@ -459,7 +459,8 @@ export default function IssueFlow() {
         >
         Land Record
         </button>
-
+        </div>
+        
         {issued && (
           <p className="ok">
             Downloaded{" "}
