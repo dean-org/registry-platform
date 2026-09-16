@@ -765,7 +765,8 @@ class VcIssuanceController(BaseController):
         # Issue through CredIssuer.
         try:
             credential = await self.credissuer_service.issue(
-                claims
+                claims,
+                credential_template=payload.credential_template,
             )
 
         except CredIssuerError as error:

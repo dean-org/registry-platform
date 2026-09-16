@@ -263,6 +263,7 @@ export default function IssueFlow() {
    * 6. PDF download
    */
   async function onCredIssuerIssue() {
+    const CREDISSUER_CREDENTIAL_TEMPLATE = "E37907852E73";
     if (!beneficiary) return;
 
     setBusy(true);
@@ -277,6 +278,7 @@ export default function IssueFlow() {
         beneficiary.internal_record_id,
         authId,
         vcType || undefined,
+        CREDISSUER_CREDENTIAL_TEMPLATE,
       );
 
       // Download the PDF returned by the backend.

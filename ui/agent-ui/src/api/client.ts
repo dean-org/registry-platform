@@ -162,6 +162,7 @@ export const api = {
     internal_record_id: string,
     authentication_id: string,
     vc_type?: string,
+    credentialTemplate?: string,
   ): Promise<{ blob: Blob; filename: string; issuanceId: string }> {
     const resp = await fetch(`${BASE}/issue/credissuer`, {
       method: "POST",
@@ -170,6 +171,7 @@ export const api = {
         internal_record_id,
         authentication_id,
         vc_type,
+        credential_template: credentialTemplate,
       }),
     });
 

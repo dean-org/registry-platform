@@ -189,6 +189,7 @@ class CredIssuerService(BaseService):
     async def issue(
         self,
         claims: Dict[str, Any],
+        credential_template: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Issue a credential and return generated PDF information."""
 
@@ -202,7 +203,7 @@ class CredIssuerService(BaseService):
             functional_record_id,
         )
 
-        self._validate_configuration()
+        self._validate_configuration(credential_template=credential_template)
 
         credential_data = self._build_credential_data(
             claims
@@ -218,8 +219,23 @@ class CredIssuerService(BaseService):
             self._safe_body(credential_data),
         )
 
+        template_id = (
+            str(credential_template).strip()
+            if credential_template
+            else str(self.template_id).strip()
+            if self.template_id
+            else None
+        )
+
+        if not template_id:
+            raise CredIssuerError(
+                "G2P-VC-502",
+                "CredIssuer credential template is not configured.",
+            )
+
         transaction = await self._issue_credential(
-            credential_data
+            credential_data,
+            template_id,
         )
 
         transaction_id = transaction.get(
@@ -339,7 +355,7 @@ class CredIssuerService(BaseService):
             "status": credential.get("status"),
         }
 
-    def _validate_configuration(self) -> None:
+    def _validate_configuration(self, credential_template: Optional[str] = None,) -> None:
         """Validate required CredIssuer configuration."""
 
         if not self.token:
@@ -348,7 +364,7 @@ class CredIssuerService(BaseService):
                 "CredIssuer API token is not configured.",
             )
 
-        if not self.template_id:
+        if not credential_template and not self.template_id:
             raise CredIssuerError(
                 "G2P-VC-502",
                 "CredIssuer credential template is not configured.",
@@ -369,6 +385,7 @@ class CredIssuerService(BaseService):
     async def _issue_credential(
         self,
         credential_data: Dict[str, Any],
+        template_id: str,
     ) -> Dict[str, Any]:
         """Submit credential data to CredIssuer."""
 
@@ -377,7 +394,7 @@ class CredIssuerService(BaseService):
         )
 
         params = {
-            "credential_template": self.template_id,
+            "credential_template": template_id,
             "mode_of_issuance": "issue_and_notify",
         }
 
@@ -386,7 +403,7 @@ class CredIssuerService(BaseService):
                 "org_code": self.org_code,
                 "email": self.issuer_email,
             },
-            "issuer_credential_template_id": self.template_id,
+            "issuer_credential_template_id": template_id,
             "credential_data": [
                 credential_data,
             ],
@@ -396,7 +413,7 @@ class CredIssuerService(BaseService):
             "Calling CredIssuer issuance API: "
             "POST /credentials/issue/client/bulk, "
             "template_id=%s, mode_of_issuance=%s",
-            self.template_id,
+            template_id,
             params["mode_of_issuance"],
         )
 
