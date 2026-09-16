@@ -130,6 +130,7 @@ class IssueVcPayload(BaseModel):
     vc_type: Optional[str] = None
     # Set when replacing a lost or damaged paper credential.
     reprint_of: Optional[str] = None
+    credential_template: Optional[str] = None
 
 
 class IssueVcRequestBody(G2PRequestBody):
