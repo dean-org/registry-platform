@@ -22,14 +22,14 @@ class LandRecordCredIssuerService(BaseService):
     """
 
     # ------------------------------------------------------------------
-    # Hard-coded Land Record CredIssuer configuration
+    # Land Record CredIssuer configuration
     # ------------------------------------------------------------------
 
     CREDENTIAL_TEMPLATE_ID = "2CC71027B1BE"
 
     # IMPORTANT:
-    # Replace this placeholder with the NEW rotated bearer token.
-    # Do not commit an exposed/old token to source control.
+    # Configure this through application configuration/environment.
+    # Do not commit a real bearer token to source control.
     CREDISSUER_TOKEN = "Bearer a7f3c9e12b84d65fa019e3c7b52a8d46f0c1be9"
 
     ORG_CODE = "FARME-OLL63"
@@ -93,14 +93,14 @@ class LandRecordCredIssuerService(BaseService):
             7. Return PDF and issuance metadata
 
         The Land Record service always uses its own configured
-        credential template ID: 2CC71027B1BE.
+        credential template ID.
         """
 
         self._validate_configuration()
 
         credential_data = self._build_credential_data(claims)
 
-        # Land Record must always use its dedicated template.
+        # Land Record always uses its dedicated template.
         template_id = self.template_id
 
         _logger.info(
@@ -123,7 +123,8 @@ class LandRecordCredIssuerService(BaseService):
 
         if not transaction_id:
             raise CredIssuerError(
-                "CredIssuer issue API did not return transaction_id"
+                "G2P-VC-502",
+                "CredIssuer issue API did not return transaction_id.",
             )
 
         _logger.info(
@@ -144,7 +145,8 @@ class LandRecordCredIssuerService(BaseService):
 
         if not credential_id:
             raise CredIssuerError(
-                "CredIssuer transaction did not return credential_id"
+                "G2P-VC-502",
+                "CredIssuer transaction did not return credential_id.",
             )
 
         status = issued_credential.get("status")
@@ -170,7 +172,8 @@ class LandRecordCredIssuerService(BaseService):
 
         if not file_path:
             raise CredIssuerError(
-                "CredIssuer presentation API did not return file_path"
+                "G2P-VC-502",
+                "CredIssuer presentation API did not return file_path.",
             )
 
         # --------------------------------------------------------------
@@ -181,7 +184,8 @@ class LandRecordCredIssuerService(BaseService):
 
         if not pdf_bytes:
             raise CredIssuerError(
-                "CredIssuer PDF download returned empty content"
+                "G2P-VC-503",
+                "CredIssuer PDF download returned empty content.",
             )
 
         _logger.info(
@@ -215,22 +219,29 @@ class LandRecordCredIssuerService(BaseService):
 
         if not self.token:
             raise CredIssuerError(
-                "CredIssuer bearer token is not configured"
+                "G2P-VC-502",
+                "CredIssuer bearer token is not configured.",
             )
 
         if not self.template_id:
             raise CredIssuerError(
-                "CredIssuer Land Record credential template is not configured"
+                "G2P-VC-502",
+                (
+                    "CredIssuer Land Record credential template "
+                    "is not configured."
+                ),
             )
 
         if not self.org_code:
             raise CredIssuerError(
-                "CredIssuer organization code is not configured"
+                "G2P-VC-502",
+                "CredIssuer organization code is not configured.",
             )
 
         if not self.issuer_email:
             raise CredIssuerError(
-                "CredIssuer issuer email is not configured"
+                "G2P-VC-502",
+                "CredIssuer issuer email is not configured.",
             )
 
     # ==================================================================
@@ -262,7 +273,8 @@ class LandRecordCredIssuerService(BaseService):
 
         if not functional_record_id:
             raise CredIssuerError(
-                "functionalRecordId is required for Land Record credential"
+                "G2P-VC-502",
+                "functionalRecordId is required for Land Record credential.",
             )
 
         credential_data = {
@@ -336,7 +348,8 @@ class LandRecordCredIssuerService(BaseService):
 
         if not isinstance(response, dict):
             raise CredIssuerError(
-                "Unexpected response from CredIssuer issue API"
+                "G2P-VC-502",
+                "Unexpected response from CredIssuer issue API.",
             )
 
         return response
@@ -393,7 +406,8 @@ class LandRecordCredIssuerService(BaseService):
 
                 if not isinstance(response, dict):
                     raise CredIssuerError(
-                        "Unexpected transaction response from CredIssuer"
+                        "G2P-VC-502",
+                        "Unexpected transaction response from CredIssuer.",
                     )
 
                 results = response.get("results") or []
@@ -412,10 +426,13 @@ class LandRecordCredIssuerService(BaseService):
                         "Revoked",
                     }:
                         raise CredIssuerError(
-                            "Land Record credential issuance failed. "
-                            f"transaction_id={transaction_id}, "
-                            f"status={status}, "
-                            f"response={self._safe_body(response)}"
+                            "G2P-VC-502",
+                            (
+                                "Land Record credential issuance failed. "
+                                f"transaction_id={transaction_id}, "
+                                f"status={status}, "
+                                f"response={self._safe_body(response)}"
+                            ),
                         )
 
                     credential_id = credential.get("credential_id")
@@ -434,9 +451,12 @@ class LandRecordCredIssuerService(BaseService):
                     "Revoked",
                 }:
                     raise CredIssuerError(
-                        "Land Record CredIssuer transaction failed. "
-                        f"transaction_id={transaction_id}, "
-                        f"status={transaction_status}"
+                        "G2P-VC-502",
+                        (
+                            "Land Record CredIssuer transaction failed. "
+                            f"transaction_id={transaction_id}, "
+                            f"status={transaction_status}"
+                        ),
                     )
 
                 # ------------------------------------------------------
@@ -473,14 +493,20 @@ class LandRecordCredIssuerService(BaseService):
                     )
                 else:
                     raise CredIssuerError(
-                        "Timed out while waiting for CredIssuer "
-                        "transaction to complete. "
-                        f"transaction_id={transaction_id}"
+                        "G2P-VC-504",
+                        (
+                            "Timed out while waiting for CredIssuer "
+                            "transaction to complete. "
+                            f"transaction_id={transaction_id}"
+                        ),
                     ) from exc
 
         raise CredIssuerError(
-            "Timed out waiting for CredIssuer credential. "
-            f"transaction_id={transaction_id}"
+            "G2P-VC-504",
+            (
+                "Timed out waiting for CredIssuer credential. "
+                f"transaction_id={transaction_id}"
+            ),
         )
 
     # ==================================================================
@@ -517,7 +543,11 @@ class LandRecordCredIssuerService(BaseService):
 
         if not isinstance(response, dict):
             raise CredIssuerError(
-                "Unexpected response from CredIssuer presentation API"
+                "G2P-VC-502",
+                (
+                    "Unexpected response from CredIssuer "
+                    "presentation API."
+                ),
             )
 
         return response
@@ -561,7 +591,8 @@ class LandRecordCredIssuerService(BaseService):
             )
 
             raise CredIssuerError(
-                "Timed out downloading Land Record PDF"
+                "G2P-VC-504",
+                "Timed out downloading Land Record PDF.",
             ) from exc
 
         except httpx.HTTPStatusError as exc:
@@ -571,8 +602,12 @@ class LandRecordCredIssuerService(BaseService):
             )
 
             raise CredIssuerError(
-                "Failed to download Land Record PDF from CredIssuer. "
-                f"HTTP {exc.response.status_code}"
+                "G2P-VC-503",
+                (
+                    "Failed to download Land Record PDF from "
+                    "CredIssuer. "
+                    f"HTTP {exc.response.status_code}"
+                ),
             ) from exc
 
         except httpx.HTTPError as exc:
@@ -582,7 +617,8 @@ class LandRecordCredIssuerService(BaseService):
             )
 
             raise CredIssuerError(
-                "HTTP error while downloading Land Record PDF"
+                "G2P-VC-503",
+                "HTTP error while downloading Land Record PDF.",
             ) from exc
 
     # ==================================================================
@@ -603,8 +639,27 @@ class LandRecordCredIssuerService(BaseService):
         Authorization header is deliberately not logged.
         """
 
+        token = str(self.token).strip()
+
+        # Prevent:
+        #     Authorization: Bearer Bearer <token>
+        #
+        # This allows either:
+        #     <token>
+        # or:
+        #     Bearer <token>
+        # in configuration.
+        if token.lower().startswith("bearer "):
+            token = token[7:].strip()
+
+        if not token:
+            raise CredIssuerError(
+                "G2P-VC-502",
+                "CredIssuer API token is empty.",
+            )
+
         headers = {
-            "Authorization": f"Bearer {self.token}",
+            "Authorization": f"Bearer {token}",
             "Content-Type": "application/json",
             "Accept": "application/json",
         }
@@ -644,9 +699,20 @@ class LandRecordCredIssuerService(BaseService):
                         message,
                     )
 
+                    # Match the error-code convention used by
+                    # CredIssuerService.
+                    code = (
+                        "G2P-VC-502"
+                        if response.status_code == 400
+                        else "G2P-VC-503"
+                    )
+
                     raise CredIssuerError(
-                        f"CredIssuer API returned HTTP "
-                        f"{response.status_code}: {message}"
+                        code,
+                        (
+                            "CredIssuer API returned HTTP "
+                            f"{response.status_code}: {message}"
+                        ),
                     )
 
                 return self._json(response)
@@ -664,8 +730,11 @@ class LandRecordCredIssuerService(BaseService):
             )
 
             raise CredIssuerError(
-                f"CredIssuer API request timed out after "
-                f"{self.timeout} seconds"
+                "G2P-VC-504",
+                (
+                    "CredIssuer API request timed out after "
+                    f"{self.timeout} seconds"
+                ),
             ) from exc
 
         except httpx.HTTPError as exc:
@@ -678,7 +747,8 @@ class LandRecordCredIssuerService(BaseService):
             )
 
             raise CredIssuerError(
-                f"CredIssuer HTTP error: {exc}"
+                "G2P-VC-503",
+                f"CredIssuer HTTP error: {exc}",
             ) from exc
 
         except Exception as exc:
@@ -690,7 +760,8 @@ class LandRecordCredIssuerService(BaseService):
             )
 
             raise CredIssuerError(
-                f"Unexpected CredIssuer error: {exc}"
+                "G2P-VC-503",
+                f"Unexpected CredIssuer error: {exc}",
             ) from exc
 
     # ==================================================================
@@ -717,7 +788,8 @@ class LandRecordCredIssuerService(BaseService):
 
         except ValueError as exc:
             raise CredIssuerError(
-                "CredIssuer returned a non-JSON response"
+                "G2P-VC-502",
+                "CredIssuer returned a non-JSON response.",
             ) from exc
 
     def _safe_body(
