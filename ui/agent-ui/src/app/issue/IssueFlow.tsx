@@ -442,7 +442,7 @@ export default function IssueFlow() {
         <h2>Credential via CredIssuer</h2>
 
         <button
-          onClick={onCredIs() => onCredIssuerIssue("E37907852E73")}
+          onClick={() => onCredIssuerIssue("E37907852E73")}
           disabled={
             busy ||
             stage !== "issue"
