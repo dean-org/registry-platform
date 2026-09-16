@@ -262,53 +262,7 @@ export default function IssueFlow() {
    * 5. PDF presentation generation
    * 6. PDF download
    */
-  async function onCredIssuerIssue() {
-    const CREDISSUER_CREDENTIAL_TEMPLATE = "E37907852E73";
-    if (!beneficiary) return;
-
-    setBusy(true);
-    setError("");
-
-    try {
-      const {
-        blob,
-        filename,
-        issuanceId,
-      } = await api.issueWithCredIssuer(
-        beneficiary.internal_record_id,
-        authId,
-        vcType || undefined,
-        CREDISSUER_CREDENTIAL_TEMPLATE,
-      );
-
-      // Download the PDF returned by the backend.
-      const url = URL.createObjectURL(blob);
-
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = filename;
-
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-
-      URL.revokeObjectURL(url);
-
-      setIssued({
-        filename,
-        issuanceId,
-      });
-
-      setStage("done");
-    } catch (e) {
-      setError((e as ApiError).message);
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function onCredIssuerLand() {
-    const CREDISSUER_CREDENTIAL_TEMPLATE = "27C69D486BAE";
+  async function onCredIssuerIssue(CREDISSUER_CREDENTIAL_TEMPLATE: string,) {
     if (!beneficiary) return;
 
     setBusy(true);
@@ -488,7 +442,7 @@ export default function IssueFlow() {
         <h2>Credential via CredIssuer</h2>
 
         <button
-          onClick={onCredIssuerIssue}
+          onClick={onCredIs() => onCredIssuerIssue("E37907852E73")}
           disabled={
             busy ||
             stage !== "issue"
@@ -497,7 +451,7 @@ export default function IssueFlow() {
           Issue with CredIssuer & Download
         </button>
         <button
-          onClick={onCredIssuerLand}
+          onClick={() => onCredIssuerIssue("27C69D486BAE")}
           disabled={
             busy ||
             stage !== "issue"
