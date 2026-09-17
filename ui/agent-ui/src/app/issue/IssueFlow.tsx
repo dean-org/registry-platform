@@ -427,7 +427,7 @@ export default function IssueFlow() {
           stage !== "done"
         }
       >
-        <h2>3 · Issue and print</h2>
+        <h2>3 · VC Issuer</h2>
 
         <button
           onClick={onIssue}
@@ -436,7 +436,7 @@ export default function IssueFlow() {
             stage !== "issue"
           }
         >
-          Download credential
+        Download Farmer VC (openg2p issuer)
         </button>
 
         <h2>Credential via CredIssuer</h2>
@@ -448,7 +448,7 @@ export default function IssueFlow() {
             stage !== "issue"
           }
         >
-          Issue with CredIssuer & Download
+        Download Farmer VC (credissuer)
         </button>
         <button
           onClick={() => onCredIssuerIssue("2CC71027B1BE")}
@@ -457,7 +457,7 @@ export default function IssueFlow() {
             stage !== "issue"
           }
         >
-        Land Record
+        Downlad Land VC (credissuer)
         </button>
         </div>
         
