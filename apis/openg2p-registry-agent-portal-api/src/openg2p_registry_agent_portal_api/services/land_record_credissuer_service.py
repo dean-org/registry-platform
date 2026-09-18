@@ -25,9 +25,8 @@ class LandRecordCredIssuerService(BaseService):
     # Land Record CredIssuer configuration
     # ------------------------------------------------------------------
 
-    CREDENTIAL_TEMPLATE_ID = "2CC71027B1BE"
+    CREDENTIAL_TEMPLATE_ID = "4584A8B4E479"
 
-    # IMPORTANT:
     # Configure this through application configuration/environment.
     # Do not commit a real bearer token to source control.
     CREDISSUER_TOKEN = "Bearer a7f3c9e12b84d65fa019e3c7b52a8d46f0c1be9"
@@ -91,9 +90,6 @@ class LandRecordCredIssuerService(BaseService):
             5. Generate PDF presentation
             6. Download generated PDF
             7. Return PDF and issuance metadata
-
-        The Land Record service always uses its own configured
-        credential template ID.
         """
 
         self._validate_configuration()
@@ -286,11 +282,20 @@ class LandRecordCredIssuerService(BaseService):
             "country": "Uganda",
             "village": "Ntinda",
             "district": "Central",
+
+            # Added fields from CredIssuer schema
+            "farmName": "Bio Farm",
+
+            # Dynamic field
             "recordNo": functional_record_id,
+
             "landTenure": "Freehold",
             "parcelArea": "500 sqm",
             "subCountry": "Kampala",
             "regProperty": "Residential",
+
+            # Added field from CredIssuer schema
+            "yearsOfFarming": "5 years",
         }
 
         _logger.debug(
@@ -364,11 +369,6 @@ class LandRecordCredIssuerService(BaseService):
     ) -> Dict[str, Any]:
         """
         Poll CredIssuer until the issued credential becomes available.
-
-        CredIssuer may accept the issuance request before the credential
-        transaction log / credential_id is immediately available.
-
-        Retry for approximately 5 minutes.
         """
 
         endpoint = (
@@ -412,10 +412,6 @@ class LandRecordCredIssuerService(BaseService):
 
                 results = response.get("results") or []
 
-                # ------------------------------------------------------
-                # Credential is available
-                # ------------------------------------------------------
-
                 if results:
                     credential = results[0]
 
@@ -440,10 +436,6 @@ class LandRecordCredIssuerService(BaseService):
                     if credential_id:
                         return credential
 
-                # ------------------------------------------------------
-                # Transaction-level failure
-                # ------------------------------------------------------
-
                 transaction_status = response.get("status")
 
                 if transaction_status in {
@@ -458,10 +450,6 @@ class LandRecordCredIssuerService(BaseService):
                             f"status={transaction_status}"
                         ),
                     )
-
-                # ------------------------------------------------------
-                # Still processing
-                # ------------------------------------------------------
 
                 if attempt < self.TRANSACTION_MAX_ATTEMPTS:
                     _logger.info(
@@ -641,14 +629,6 @@ class LandRecordCredIssuerService(BaseService):
 
         token = str(self.token).strip()
 
-        # Prevent:
-        #     Authorization: Bearer Bearer <token>
-        #
-        # This allows either:
-        #     <token>
-        # or:
-        #     Bearer <token>
-        # in configuration.
         if token.lower().startswith("bearer "):
             token = token[7:].strip()
 
@@ -699,8 +679,6 @@ class LandRecordCredIssuerService(BaseService):
                         message,
                     )
 
-                    # Match the error-code convention used by
-                    # CredIssuerService.
                     code = (
                         "G2P-VC-502"
                         if response.status_code == 400
