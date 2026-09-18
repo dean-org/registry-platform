@@ -77,7 +77,19 @@ class CertifyIssuanceService(BaseService):
             },
         )
         self._raise_for_status(resp, "PRE_AUTHORIZED_DATA_FAILED")
-        offer_uri = resp.json()["credential_offer_uri"]
+        #offer_uri = resp.json()["credential_offer_uri"]
+        response_json = resp.json()
+        _logger.info(
+            "Inji Certify pre-authorized-data response: status=%s body=%s",
+            resp.status_code,
+            response_json,
+        )
+        if "credential_offer_uri" not in response_json:
+            raise RuntimeError(
+                f"Inji Certify offer creation failed: "
+                f"HTTP {resp.status_code}: {response_json}"
+            )
+        offer_uri = response_json["credential_offer_uri"]
         return urllib.parse.unquote(offer_uri).rstrip("/").split("/")[-1]
 
     async def _read_offer(
