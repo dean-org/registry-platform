@@ -3,7 +3,7 @@ import logging
 import os
 import time
 from datetime import datetime, timezone
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Tuple
 
 import httpx
 from openg2p_fastapi_common.service import BaseService
@@ -1065,8 +1065,8 @@ class CredIssuerService(BaseService):
             phone               = phoneNumbers[primary or first].number
             gender              = gender
             dateOfBirth         = dateOfBirth
-            recipientFirstName  = firstName
-            recipientLastName   = lastName
+            recipientFirstName  = firstName, else first token of fullName
+            recipientLastName   = lastName, else remaining tokens of fullName
         """
 
         # ------------------------------------------------------------------
@@ -1143,6 +1143,9 @@ class CredIssuerService(BaseService):
         # ------------------------------------------------------------------
         # Recipient name
         # ------------------------------------------------------------------
+        # Prefer explicit firstName/lastName claims; fall back to
+        # splitting fullName when either is missing, since CredIssuer
+        # requires both recipientFirstName and recipientLastName.
         recipient_first_name = self._optional_string(
             claims,
             "firstName",
@@ -1152,6 +1155,29 @@ class CredIssuerService(BaseService):
             claims,
             "lastName",
         )
+
+        if not recipient_first_name or not recipient_last_name:
+            fallback_first, fallback_last = self._split_full_name(
+                claims
+            )
+
+            recipient_first_name = (
+                recipient_first_name or fallback_first
+            )
+            recipient_last_name = (
+                recipient_last_name or fallback_last
+            )
+
+            if not recipient_first_name or not recipient_last_name:
+                _logger.warning(
+                    "Could not fully derive recipient name: "
+                    "functionalRecordId=%s, firstName_present=%s, "
+                    "lastName_present=%s, fullName_present=%s",
+                    functional_record_id,
+                    bool(claims.get("firstName")),
+                    bool(claims.get("lastName")),
+                    bool(claims.get("fullName")),
+                )
 
         # ------------------------------------------------------------------
         # Issuance date
@@ -1439,6 +1465,38 @@ class CredIssuerService(BaseService):
             )
             + "000Z"
         )
+
+    @staticmethod
+    def _split_full_name(
+        claims: Dict[str, Any],
+    ) -> Tuple[Optional[str], Optional[str]]:
+        """Split claims['fullName'] into (first_name, last_name).
+
+        Used as a fallback when firstName/lastName are not present
+        in the claims. The first whitespace-separated token becomes
+        the first name; everything after it becomes the last name.
+        If there is only a single token, it is used as the first
+        name and last name is left as None.
+        """
+
+        full_name = claims.get(
+            "fullName"
+        )
+
+        if not full_name:
+            return None, None
+
+        parts = str(
+            full_name
+        ).strip().split()
+
+        if not parts:
+            return None, None
+
+        if len(parts) == 1:
+            return parts[0], None
+
+        return parts[0], " ".join(parts[1:])
 
     @staticmethod
     def _current_utc_iso() -> str:
