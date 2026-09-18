@@ -1060,6 +1060,13 @@ class CredIssuerService(BaseService):
             farmerGroup  = Green Farmers Co-op
             issuanceDate = current UTC timestamp
             expiryDate   = one calendar year from issuance
+
+        Claim-derived values:
+            phone               = phoneNumbers[primary or first].number
+            gender              = gender
+            dateOfBirth         = dateOfBirth
+            recipientFirstName  = firstName
+            recipientLastName   = lastName
         """
 
         # ------------------------------------------------------------------
@@ -1077,7 +1084,9 @@ class CredIssuerService(BaseService):
         # NID must be exactly the functionalRecordId.
         # NOTE: NID temporarily disabled per request - only the fields
         # below (email, district, farmerID, expiryDate, subCountry,
-        # farmerGroup, issuanceDate) should go out in credential_data.
+        # farmerGroup, issuanceDate, phone, gender, dateOfBirth,
+        # recipientFirstName, recipientLastName) should go out in
+        # credential_data.
         # nid = functional_record_id
 
         # ------------------------------------------------------------------
@@ -1108,6 +1117,43 @@ class CredIssuerService(BaseService):
         )
 
         # ------------------------------------------------------------------
+        # Phone
+        # ------------------------------------------------------------------
+        # Taken from claims["phoneNumbers"], a list of
+        # {"type", "number", "is_primary"} entries. Prefers the entry
+        # marked is_primary; falls back to the first entry.
+        phone = self._get_primary_phone(
+            claims
+        )
+
+        # ------------------------------------------------------------------
+        # Gender
+        # ------------------------------------------------------------------
+        gender = self._get_gender(
+            claims
+        )
+
+        # ------------------------------------------------------------------
+        # Date of birth
+        # ------------------------------------------------------------------
+        date_of_birth = self._get_date_of_birth_iso(
+            claims
+        )
+
+        # ------------------------------------------------------------------
+        # Recipient name
+        # ------------------------------------------------------------------
+        recipient_first_name = self._optional_string(
+            claims,
+            "firstName",
+        )
+
+        recipient_last_name = self._optional_string(
+            claims,
+            "lastName",
+        )
+
+        # ------------------------------------------------------------------
         # Issuance date
         # ------------------------------------------------------------------
         # Example:
@@ -1134,12 +1180,17 @@ class CredIssuerService(BaseService):
         credential_data: Dict[str, Any] = {
             # "NID": nid,
             "email": email,
+            "phone": phone,
+            "gender": gender,
             "district": district,
             "farmerID": farmer_id,
             "expiryDate": expiry_date,
             "subCountry": sub_country,
+            "dateOfBirth": date_of_birth,
             "farmerGroup": farmer_group,
             "issuanceDate": issuance_date,
+            "recipientFirstName": recipient_first_name,
+            "recipientLastName": recipient_last_name,
         }
 
         # ------------------------------------------------------------------
@@ -1206,12 +1257,17 @@ class CredIssuerService(BaseService):
         required_template_fields = {
             # "NID",
             "email",
+            "phone",
+            "gender",
             "district",
             "farmerID",
             "expiryDate",
             "subCountry",
+            "dateOfBirth",
             "farmerGroup",
             "issuanceDate",
+            "recipientFirstName",
+            "recipientLastName",
         }
 
         missing_fields = sorted(
@@ -1249,16 +1305,140 @@ class CredIssuerService(BaseService):
             "nid_source=functionalRecordId, "
             "email_source=hardcoded, "
             "district_source=hardcoded, "
+            "phone_configured=%s, "
+            "gender_configured=%s, "
+            "dateOfBirth_configured=%s, "
+            "recipientFirstName_configured=%s, "
+            "recipientLastName_configured=%s, "
             "photo_configured=%s",
             functional_record_id,
             issuance_date,
             expiry_date,
             sub_country,
             farmer_group,
+            "phone" in credential_data,
+            "gender" in credential_data,
+            "dateOfBirth" in credential_data,
+            "recipientFirstName" in credential_data,
+            "recipientLastName" in credential_data,
             "photo" in credential_data,
         )
 
         return credential_data
+
+    @staticmethod
+    def _get_primary_phone(
+        claims: Dict[str, Any],
+    ) -> Optional[str]:
+        """Extract a phone number from the claims' phoneNumbers list.
+
+        Prefers the entry marked is_primary; falls back to the first
+        available number. Non-digit characters (e.g. a leading '+')
+        are stripped to match the expected template format.
+        """
+
+        phone_numbers = claims.get(
+            "phoneNumbers"
+        )
+
+        if not isinstance(
+            phone_numbers,
+            list,
+        ) or not phone_numbers:
+            return None
+
+        primary = next(
+            (
+                entry
+                for entry in phone_numbers
+                if isinstance(entry, dict)
+                and entry.get("is_primary")
+            ),
+            None,
+        )
+
+        entry = primary or phone_numbers[0]
+
+        if not isinstance(
+            entry,
+            dict,
+        ):
+            return None
+
+        number = entry.get(
+            "number"
+        )
+
+        if not number:
+            return None
+
+        digits = "".join(
+            ch
+            for ch in str(number)
+            if ch.isdigit()
+        )
+
+        return digits or None
+
+    @staticmethod
+    def _get_gender(
+        claims: Dict[str, Any],
+    ) -> Optional[str]:
+        """Normalize gender claim to Title Case (e.g. 'MALE' -> 'Male')."""
+
+        value = claims.get(
+            "gender"
+        )
+
+        if not value:
+            return None
+
+        value = str(
+            value
+        ).strip()
+
+        return value.capitalize() if value else None
+
+    @staticmethod
+    def _get_date_of_birth_iso(
+        claims: Dict[str, Any],
+    ) -> Optional[str]:
+        """Convert a dateOfBirth claim (e.g. '1998-01-02') into
+        CredIssuer's ISO timestamp format (midnight UTC)."""
+
+        value = claims.get(
+            "dateOfBirth"
+        )
+
+        if not value:
+            return None
+
+        value = str(
+            value
+        ).strip()
+
+        if not value:
+            return None
+
+        try:
+            parsed = datetime.strptime(
+                value[:10],
+                "%Y-%m-%d",
+            )
+
+        except ValueError:
+            _logger.warning(
+                "Could not parse dateOfBirth claim: %s",
+                value,
+            )
+            return None
+
+        return (
+            parsed.strftime(
+                "%Y-%m-%dT00:00:00."
+            )
+            + "000Z"
+        )
 
     @staticmethod
     def _current_utc_iso() -> str:
