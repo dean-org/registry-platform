@@ -442,7 +442,7 @@ export default function IssueFlow() {
         <h2>Credential via CredIssuer</h2>
         <div style={{ display: "flex", gap: "10px" }}>
         <button
-          onClick={() => onCredIssuerIssue("E37907852E73")}
+          onClick={() => onCredIssuerIssue("D2DE62A6824D")}
           disabled={
             busy ||
             stage !== "issue"
@@ -451,7 +451,7 @@ export default function IssueFlow() {
         Download Farmer VC (credissuer)
         </button>
         <button
-          onClick={() => onCredIssuerIssue("2CC71027B1BE")}
+          onClick={() => onCredIssuerIssue("4584A8B4E479")}
           disabled={
             busy ||
             stage !== "issue"
