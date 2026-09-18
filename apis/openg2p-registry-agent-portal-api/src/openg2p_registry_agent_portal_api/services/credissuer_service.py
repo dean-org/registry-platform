@@ -1119,9 +1119,11 @@ class CredIssuerService(BaseService):
         # ------------------------------------------------------------------
         # Phone
         # ------------------------------------------------------------------
-        # Taken from claims["phoneNumbers"], a list of
+        # Taken from claims["phoneNumbers"], normally a list of
         # {"type", "number", "is_primary"} entries. Prefers the entry
-        # marked is_primary; falls back to the first entry.
+        # marked is_primary; falls back to the first entry. Also
+        # tolerates phoneNumbers arriving as a stringified list or a
+        # list of plain number strings (see _get_primary_phone).
         phone = self._get_primary_phone(
             claims
         )
@@ -1361,11 +1363,42 @@ class CredIssuerService(BaseService):
         Prefers the entry marked is_primary; falls back to the first
         available number. Non-digit characters (e.g. a leading '+')
         are stripped to match the expected template format.
+
+        Handles phoneNumbers arriving as:
+          - an actual list of dicts: [{"number": "...", "is_primary": True}]
+          - a list of plain strings: ["+2519..."]
+          - a stringified Python list: "[{'number': '...', ...}]"
         """
 
         phone_numbers = claims.get(
             "phoneNumbers"
         )
+
+        if isinstance(
+            phone_numbers,
+            str,
+        ):
+            stripped = phone_numbers.strip()
+
+            if not stripped:
+                return None
+
+            try:
+                import ast
+
+                phone_numbers = ast.literal_eval(
+                    stripped
+                )
+
+            except (
+                ValueError,
+                SyntaxError,
+            ):
+                _logger.warning(
+                    "Could not parse phoneNumbers string claim: %s",
+                    stripped,
+                )
+                return None
 
         if not isinstance(
             phone_numbers,
@@ -1385,15 +1418,22 @@ class CredIssuerService(BaseService):
 
         entry = primary or phone_numbers[0]
 
-        if not isinstance(
+        if isinstance(
             entry,
             dict,
         ):
-            return None
+            number = entry.get(
+                "number"
+            )
 
-        number = entry.get(
-            "number"
-        )
+        elif isinstance(
+            entry,
+            str,
+        ):
+            number = entry
+
+        else:
+            return None
 
         if not number:
             return None
