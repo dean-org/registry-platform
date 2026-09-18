@@ -768,7 +768,7 @@ class VcIssuanceController(BaseController):
 
         # Issue through CredIssuer.
         try:
-            if payload.credential_template == "2CC71027B1BE":
+            if payload.credential_template == "4584A8B4E479":
                 credential = await self.land_record_credissuer_service.issue(
                     claims
                 )
