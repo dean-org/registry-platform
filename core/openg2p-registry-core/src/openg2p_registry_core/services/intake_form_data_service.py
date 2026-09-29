@@ -458,7 +458,7 @@ class G2PIntakeFormDataService(BaseService):
                     payload_specifies_link="link_internal_record_id" in payload,
                 )
                 record_data["link_internal_record_id"] = resolved_link
-                if domain_service:
+                if domain_service and _section.is_core_section:
                     await domain_service.validate_intake_parent_link(
                         record_data, resolved_link, session
                     )
