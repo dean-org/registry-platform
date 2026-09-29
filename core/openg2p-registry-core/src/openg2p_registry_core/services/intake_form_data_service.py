@@ -148,7 +148,7 @@ class G2PIntakeFormDataService(BaseService):
         await G2PAttributeValueValidator.get_component().validate_records(section_payload or [])
 
         if domain_service:
-            await domain_service.validate_domain_attributes(section_payload or [])
+            await domain_service.validate_domain_attributes(section_payload or [],section_id=section_id,)
 
         existing_rows = await self._get_intake_rows(intake_class, submission.submission_id, session)
         incoming_ids = await self._upsert_intake_rows(
