@@ -325,7 +325,7 @@ class G2PIntakeFormDataService(BaseService):
             except ValueError as validation_error:
                 self._invalid_request(str(validation_error))
 
-        policy_condition = await self._build_intake_policy_condition(
+        policy_condition = self._build_intake_policy_condition(
             register_id, intake_class, data_policies, session
         )
         if policy_condition is not None:
@@ -867,7 +867,7 @@ class G2PIntakeFormDataService(BaseService):
                         section.section_id,
                     )
                 )
-                policy_condition = await self._build_intake_policy_condition(
+                policy_condition = self._build_intake_policy_condition(
                     section.section_register_id,
                     intake_class,
                     data_policies,
@@ -1510,7 +1510,7 @@ class G2PIntakeFormDataService(BaseService):
         """Raise if the submission is missing or its intake rows are blocked by data policy."""
         submission = await self._get_submission_or_error(submission_id, session)
         intake_class = await self._resolve_intake_form_class(submission.register_id, session)
-        policy_condition = await self._build_intake_policy_condition(
+        policy_condition = self._build_intake_policy_condition(
             submission.register_id,
             intake_class,
             data_policies,
@@ -1574,7 +1574,7 @@ class G2PIntakeFormDataService(BaseService):
                 )
                 continue
 
-            policy_condition = await self._build_intake_policy_condition(
+            policy_condition = self._build_intake_policy_condition(
                 register_definition.register_id,
                 intake_class,
                 data_policies,
