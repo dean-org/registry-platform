@@ -7,7 +7,7 @@ from openg2p_fastapi_common.service import BaseService
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
-from ..config import Settings, VcDefinition
+from ..config import CROP_LINK_COLUMN, Settings, VcDefinition
 
 _config = Settings.get_config()
 _logger = logging.getLogger(_config.logging_default_logger_name)
@@ -115,6 +115,35 @@ class RegistryLookupService(BaseService):
         if status is not None and str(status).upper() != ACTIVE_STATUS:
             reason = f"Record status is {status}; only {ACTIVE_STATUS} records can be issued a credential."
         return row, reason
+
+    async def get_crop_record(
+        self, foundational_id: str, vc: VcDefinition
+    ) -> Dict[str, Any]:
+        """Latest crop register row for a farmer, found by link_foundational_id.
+
+        A farmer may have several crop rows (seasons, parcels). The credential
+        carries one crop, so the most recently created row is used rather than
+        failing — this is a deliberate difference from `_fetch_one`.
+        """
+        table = vc.view
+        if not re.match(r"^[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)?$", table or ""):
+            raise RegistryLookupError(
+                "G2P-VC-500", f"Invalid crop table in configuration: {table!r}"
+            )
+        link_column = self._validate(CROP_LINK_COLUMN, "lookup column")
+        query = (
+            f'SELECT * FROM {table} WHERE "{link_column}" = :value '  # noqa: S608
+            "ORDER BY created_at DESC NULLS LAST LIMIT 1"
+        )
+        async with self._session_maker()() as session:
+            result = await session.execute(text(query), {"value": foundational_id})
+            row = result.mappings().first()
+        if row is None:
+            raise RegistryLookupError(
+                "G2P-VC-404",
+                "No crop record is registered for this farmer.",
+            )
+        return dict(row)
 
     async def get_record(self, internal_record_id: str, vc: VcDefinition) -> Dict[str, Any]:
         row = await self._fetch_one(vc, vc.record_id_column, internal_record_id)

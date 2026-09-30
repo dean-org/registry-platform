@@ -150,6 +150,19 @@ class VcIssuanceController(BaseController):
             methods=["POST"],
         )
 
+        self.router.add_api_route(
+            "/issue/crop",
+            self.issue_crop,
+            responses={
+                200: {
+                    "content": {"application/pdf": {}},
+                    "description": "The printable crop credential.",
+                },
+                400: {"model": IssueVcResponse},
+            },
+            methods=["POST"],
+        )
+
     # ── helpers ──────────────────────────────────────────────────────────────
 
     @staticmethod
@@ -898,5 +911,180 @@ class VcIssuanceController(BaseController):
                 "X-Issuance-Id": entry.issuance_id,
                 "X-Credential-Id": str(credential_id),
                 "X-Vc-Type": vc.config_id,
+            },
+        )
+
+    @require_permissions({ISSUE_PERMISSION})
+    async def issue_crop(
+        self,
+        request: Request,
+        issue_request: IssueVcRequest,
+    ):
+        """Issue the Crop credential through Inji Certify (OpenG2P issuer).
+
+        Same gates as the farmer credential (agent permission + a valid
+        beneficiary authentication). The farmer record is resolved through the
+        farmer VC definition to obtain the foundational id, and the crop claims
+        are then read from the crop register by `link_foundational_id`. The crop
+        credential definition is hardcoded in config, not taken from
+        vc_definitions.
+        """
+
+        payload = issue_request.request_body.request_payload
+        agent_id = self._agent_id(request)
+        crop_vc = _config.crop_vc_definition
+
+        set_audit(
+            request,
+            action="issue_credential_crop",
+            resource_type="verifiable_credential",
+            resource_id=payload.internal_record_id,
+            detail={"vc_type": crop_vc.config_id, "reprint_of": payload.reprint_of},
+        )
+
+        def fail(code: str, message: str, status_code: int = 400):
+            set_audit(
+                request,
+                outcome="failure",
+                detail={"error_code": code, "reason": message},
+            )
+            return Response(
+                content=self.helper.error(
+                    IssueVcResponse,
+                    IssueVcResponseBody,
+                    code,
+                    message,
+                    issue_request,
+                ).model_dump_json(),
+                media_type="application/json",
+                status_code=status_code,
+            )
+
+        # The farmer definition the agent looked the beneficiary up with.
+        farmer_vc = _config.get_vc_definition(payload.vc_type)
+        if farmer_vc is None:
+            return fail(
+                "G2P-VC-501",
+                f"Unknown credential type {payload.vc_type!r}.",
+            )
+
+        try:
+            auth, authorised, reason, _ = (
+                await self.beneficiary_auth_service.authorisation(
+                    internal_record_id=payload.internal_record_id,
+                    authentication_id=payload.authentication_id,
+                )
+            )
+        except BeneficiaryAuthError as error:
+            return fail(error.code, error.message)
+
+        if not authorised:
+            return fail(
+                "G2P-VC-401",
+                reason or "The beneficiary is not authenticated.",
+            )
+
+        register_id = ""
+        try:
+            farmer_row = await self.registry_lookup_service.get_record(
+                payload.internal_record_id,
+                farmer_vc,
+            )
+            register_id = self._register_id(None, farmer_row)
+
+            foundational_id = farmer_row.get(FOUNDATIONAL_ID_COLUMN)
+            if not foundational_id:
+                return fail(
+                    "G2P-VC-500",
+                    "The farmer record has no foundational id to link crops by.",
+                )
+
+            crop_row = await self.registry_lookup_service.get_crop_record(
+                str(foundational_id),
+                crop_vc,
+            )
+            claims = self.registry_lookup_service.claims_from_row(
+                crop_row,
+                crop_vc,
+            )
+        except RegistryLookupError as error:
+            return fail(error.code, error.message)
+
+        async def log_failure(message: str, credential=None):
+            await self.issuance_log_service.record(
+                register_id=register_id,
+                internal_record_id=payload.internal_record_id,
+                vc_type=crop_vc.config_id,
+                issued_by=agent_id,
+                credential_id=(
+                    self.issuance_log_service.credential_id_of(credential)
+                    if credential is not None
+                    else None
+                ),
+                authentication_id=auth.authentication_id if auth else None,
+                status=VcIssuanceStatusEnum.failed.value,
+                failure_reason=message,
+                reprint_of=payload.reprint_of,
+            )
+
+        try:
+            credential = await self.certify_issuance_service.issue(
+                claims,
+                crop_vc.config_id,
+                crop_vc.credential_types,
+            )
+        except CertifyIssuanceError as error:
+            await log_failure(error.message)
+            return fail(error.code, error.message, status_code=502)
+
+        try:
+            pdf_bytes = self.pdf_render_service.render(
+                claims,
+                credential,
+                crop_vc,
+            )
+        except Exception as error:  # noqa: BLE001
+            _logger.exception(
+                "Crop credential was issued but the PDF could not be rendered"
+            )
+            await log_failure(f"PDF rendering failed: {error}", credential)
+            return fail(
+                "G2P-VC-500",
+                f"PDF rendering failed: {error}",
+                status_code=500,
+            )
+
+        entry = await self.issuance_log_service.record(
+            register_id=register_id,
+            internal_record_id=payload.internal_record_id,
+            vc_type=crop_vc.config_id,
+            issued_by=agent_id,
+            credential_id=self.issuance_log_service.credential_id_of(credential),
+            authentication_id=auth.authentication_id if auth else None,
+            reprint_of=payload.reprint_of,
+        )
+
+        set_audit(
+            request,
+            outcome="success",
+            subject=register_id or None,
+            detail={
+                "issuance_id": entry.issuance_id,
+                "credential_id": entry.credential_id,
+                "vc_type": crop_vc.config_id,
+                "authentication_id": auth.authentication_id if auth else None,
+            },
+        )
+
+        filename = f"{crop_vc.config_id}-{entry.issuance_id}.pdf"
+
+        return Response(
+            content=pdf_bytes,
+            media_type="application/pdf",
+            headers={
+                "Content-Disposition": f'attachment; filename="{filename}"',
+                "X-Issuance-Id": entry.issuance_id,
+                "X-Credential-Id": entry.credential_id or "",
+                "X-Vc-Type": crop_vc.config_id,
             },
         )
