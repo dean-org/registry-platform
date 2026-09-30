@@ -21,6 +21,7 @@ dependencies = [
   "sqlalchemy[asyncio]",
   "httpx",
   "cryptography",
+  "greenlet",
   # Decodes the claim-169 CWT so the verify screen can show what was checked.
   "cbor2",
   "qrcode",
