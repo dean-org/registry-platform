@@ -5,12 +5,32 @@ from typing import Any, Dict, Optional, Tuple
 from openg2p_fastapi_common.context import dbengine
 from openg2p_fastapi_common.service import BaseService
 from sqlalchemy import text
-from sqlalchemy.ext.asyncio import async_sessionmaker
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from ..config import CROP_LINK_COLUMN, Settings, VcDefinition
 
 _config = Settings.get_config()
 _logger = logging.getLogger(_config.logging_default_logger_name)
+
+# g2p_register_crops lives in a different database (crop_registry) from the
+# farmer registry's own db (db_dbname / `dbengine`), so it needs its own
+# engine — Postgres cannot query across databases on one connection. Built
+# lazily (module import must not touch the network) and cached, same shape as
+# openg2p_fastapi_common's own `dbengine`, just scoped to this one extra DB.
+_crop_engine = None
+
+
+def _crop_dbengine():
+    global _crop_engine
+    if _crop_engine is None:
+        c = Settings.get_config()
+        url = (
+            f"postgresql+asyncpg://{c.crop_db_username}:{c.crop_db_password}"
+            f"@{c.crop_db_hostname}:{c.crop_db_port}/{c.crop_db_dbname}"
+        )
+        _crop_engine = create_async_engine(url)
+    return _crop_engine
+
 
 # View and column names come from operator configuration, never from a request.
 # They are still validated before being interpolated, so a misconfiguration
@@ -117,9 +137,14 @@ class RegistryLookupService(BaseService):
         return row, reason
 
     async def get_crop_record(
-        self, foundational_id: str, vc: VcDefinition
+        self, farmer_internal_record_id: str, vc: VcDefinition
     ) -> Dict[str, Any]:
-        """Latest crop register row for a farmer, found by link_foundational_id.
+        """Latest crop register row for a farmer, found by link_internal_record_id.
+
+        Every `g2p_register_*` table carries `link_internal_record_id` as the FK
+        to its parent's `internal_record_id` — that's the platform's join key,
+        not `link_foundational_id` (which is only a denormalized copy of the
+        parent's foundational_id for search, and isn't reliably populated).
 
         A farmer may have several crop rows (seasons, parcels). The credential
         carries one crop, so the most recently created row is used rather than
@@ -135,8 +160,15 @@ class RegistryLookupService(BaseService):
             f'SELECT * FROM {table} WHERE "{link_column}" = :value '  # noqa: S608
             "ORDER BY created_at DESC NULLS LAST LIMIT 1"
         )
-        async with self._session_maker()() as session:
-            result = await session.execute(text(query), {"value": foundational_id})
+        # NOTE: the crop-registry DB, not `self._session_maker()` (that's the
+        # farmer registry's own DB, a different database entirely).
+        crop_session_maker = async_sessionmaker(
+            _crop_dbengine(), expire_on_commit=False
+        )
+        async with crop_session_maker() as session:
+            result = await session.execute(
+                text(query), {"value": farmer_internal_record_id}
+            )
             row = result.mappings().first()
         if row is None:
             raise RegistryLookupError(
