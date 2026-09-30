@@ -251,6 +251,46 @@ export default function IssueFlow() {
   }
 
   /**
+   * Crop credential via the OpenG2P issuer (Inji Certify).
+   *
+   * Uses the farmer selected at lookup; the backend reads the crop claims
+   * from the crop register by the farmer's foundational id.
+   */
+  async function onCropIssue() {
+    if (!beneficiary) return;
+
+    setBusy(true);
+    setError("");
+
+    try {
+      const { blob, filename, issuanceId } = await api.issueCrop(
+        beneficiary.internal_record_id,
+        authId,
+        vcType || undefined,
+      );
+
+      const url = URL.createObjectURL(blob);
+
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+
+      URL.revokeObjectURL(url);
+
+      setIssued({ filename, issuanceId });
+      setStage("done");
+    } catch (e) {
+      setError((e as ApiError).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  /**
    * New CredIssuer issuance flow.
    *
    * The backend performs:
@@ -437,6 +477,16 @@ export default function IssueFlow() {
           }
         >
         Download Farmer VC (openg2p issuer)
+        </button>
+
+        <button
+          onClick={onCropIssue}
+          disabled={
+            busy ||
+            stage !== "issue"
+          }
+        >
+        Download Crop VC (openg2p issuer)
         </button>
 
         <h2>Credential via CredIssuer</h2>

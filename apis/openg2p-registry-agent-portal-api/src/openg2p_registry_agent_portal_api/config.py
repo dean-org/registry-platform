@@ -39,6 +39,69 @@ class VcDefinition(BaseModel):
     qr_data_label: Optional[str] = None
 
 
+# ── Crop credential (hardcoded on purpose) ───────────────────────────────────
+# The Farmer credential is supplied by the deployment through
+# REGISTRY_AGENT_PORTAL_API_VC_DEFINITIONS. The Crop credential is deliberately
+# NOT part of that list: it is defined here in code and read from its own
+# setting (`crop_vc_definition`, env REGISTRY_AGENT_PORTAL_API_CROP_VC_DEFINITION),
+# so the two never collide and the farmer chart values stay untouched.
+#
+# Unlike the farmer definition, `view` is not a registry view keyed on
+# internal_record_id: it is the crop register table, which is queried by
+# `link_foundational_id` (the farmer's foundational id).
+CROP_CLAIM_COLUMNS: List[str] = [
+    "farmer_id",
+    "parcel_id",
+    "crop_code",
+    "crop_name",
+    "variety_code",
+    "season",
+    "production_year",
+    "cultivated_area",
+    "area_unit",
+    "planting_date",
+    "expected_harvest_date",
+    "actual_harvest_date",
+    "seed_type",
+    "seed_quantity",
+    "expected_yield",
+    "actual_yield",
+    "yield_unit",
+    "fertilizer_used",
+    "fertilizer_type",
+    "fertilizer_quantity",
+    "pesticide_used",
+    "pesticide_quantity",
+    "improved_seed_used",
+    "machinery_used",
+    "buyer_id",
+    "market_id",
+    "cooperative_id",
+    "storage_facility_id",
+    "expected_market_price",
+    "actual_sale_price",
+    "quantity_sold",
+]
+
+CROP_CONFIG_ID = "OpenG2PCropCredential"
+CROP_TABLE = "public.g2p_register_crops"
+CROP_LINK_COLUMN = "link_foundational_id"
+
+
+def _default_crop_vc_definition() -> "VcDefinition":
+    return VcDefinition(
+        config_id=CROP_CONFIG_ID,
+        credential_types=["VerifiableCredential", CROP_CONFIG_ID],
+        view=CROP_TABLE,
+        record_id_column="internal_record_id",
+        claim_columns=CROP_CLAIM_COLUMNS,
+        svg_template=None,  # plain fallback layout until a crop-card.svg is shipped
+        qr_claim_path="claim169.qrCode",
+        display_name="Crop Credential",
+        qr_data_label="Farmer ID",
+    )
+
+
 class Settings(ExtSettings):
     model_config = SettingsConfigDict(
         env_prefix="registry_agent_portal_api_", env_file=".env", extra="allow"
@@ -144,6 +207,8 @@ class Settings(ExtSettings):
 
     # ── Credential definitions (supplied by the manifestation) ────────────────
     vc_definitions: List[VcDefinition] = []
+    # Crop credential: hardcoded default above, separate from vc_definitions.
+    crop_vc_definition: VcDefinition = Field(default_factory=_default_crop_vc_definition)
 
     # ── PDF rendering ─────────────────────────────────────────────────────────
     svg_template_dir: str = "/app/pdf-templates"
