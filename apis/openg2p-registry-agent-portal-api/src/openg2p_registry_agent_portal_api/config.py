@@ -137,6 +137,12 @@ class Settings(ExtSettings):
     db_port: int = 5432
     db_dbname: str = "registrydb"
 
+    crop_db_username: str
+    crop_db_password: str
+    crop_db_hostname: str
+    crop_db_port: int
+    crop_db_dbname: str
+
     # ── IAM authentication (agents, Keycloak `agent` realm) ───────────────────
     # Agents are a distinct audience from staff: their own realm and their own
     # client, so a staff token carries no rights here.
