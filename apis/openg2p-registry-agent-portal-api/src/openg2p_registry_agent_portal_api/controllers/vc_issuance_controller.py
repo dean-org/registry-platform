@@ -1007,6 +1007,8 @@ class VcIssuanceController(BaseController):
                 crop_row,
                 crop_vc,
             )
+            certify_claims = {c: "" for c in crop_vc.claim_columns}
+            certify_claims.update(claims)
         except RegistryLookupError as error:
             return fail(error.code, error.message)
 
@@ -1029,7 +1031,7 @@ class VcIssuanceController(BaseController):
 
         try:
             credential = await self.certify_issuance_service.issue(
-                claims,
+                certify_claims,
                 crop_vc.config_id,
                 crop_vc.credential_types,
             )
