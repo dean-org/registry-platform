@@ -41,7 +41,7 @@ class CredIssuerService(BaseService):
 
     Hardcoded credential values:
         NID      = functionalRecordId
-        email    = nudili@denipl.net
+        email    = dharanidaran.gpm@gmail.com
         district = Ganlulu
 
     Default photo:
