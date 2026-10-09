@@ -33,6 +33,68 @@ def _b64url(data: bytes) -> str:
     return base64.urlsafe_b64encode(data).rstrip(b"=").decode()
 
 
+# Fields whose values are credentials/secrets: never written to logs in full.
+_SENSITIVE_KEYS = {
+    "access_token",
+    "pre-authorized_code",
+    "pre_authorized_code",
+    "jwt",
+    "c_nonce",
+    "authorization",
+    "tx_code",
+}
+_MAX_LOG_CHARS = 6000
+
+
+def _mask(value: Any) -> Any:
+    """Recursively mask secret values so tokens never land in logs."""
+    if isinstance(value, dict):
+        return {
+            k: (
+                _short_secret(v)
+                if str(k).lower() in _SENSITIVE_KEYS
+                else _mask(v)
+            )
+            for k, v in value.items()
+        }
+    if isinstance(value, list):
+        return [_mask(v) for v in value]
+    return value
+
+
+def _short_secret(value: Any) -> str:
+    text = str(value)
+    return f"{text[:6]}...<masked len={len(text)}>" if len(text) > 12 else "<masked>"
+
+
+def _fmt(data: Any) -> str:
+    try:
+        text = json.dumps(_mask(data), default=str, ensure_ascii=False)
+    except Exception:  # noqa: BLE001
+        text = str(data)
+    if len(text) > _MAX_LOG_CHARS:
+        text = text[:_MAX_LOG_CHARS] + f"...<truncated, total {len(text)} chars>"
+    return text
+
+
+def _log_request(step: str, method: str, url: str, headers: Any = None, body: Any = None) -> None:
+    _logger.info(
+        "[CERTIFY][%s] REQUEST %s %s headers=%s body=%s",
+        step, method, url, _fmt(headers or {}), _fmt(body),
+    )
+
+
+def _log_response(step: str, resp: "httpx.Response", elapsed_ms: float) -> None:
+    try:
+        body: Any = resp.json()
+    except Exception:  # noqa: BLE001
+        body = resp.text
+    _logger.info(
+        "[CERTIFY][%s] RESPONSE status=%s elapsed_ms=%.0f body=%s",
+        step, resp.status_code, elapsed_ms, _fmt(body),
+    )
+
+
 class CertifyIssuanceService(BaseService):
     """Pushes claims into Inji Certify via the pre-authorized-code flow.
 
@@ -67,15 +129,17 @@ class CertifyIssuanceService(BaseService):
                 "Sending claims to Inji Certify. claim_keys=%s",
                 claims,
             )
-        resp = await client.post(
-            f"{base}/pre-authorized-data",
-            json={
-                "credential_configuration_id": config_id,
-                "claims": claims,
-                "expires_in": _config.certify_offer_expires_in,
-                "tx_code": _config.certify_tx_code,
-            },
-        )
+        url = f"{base}/pre-authorized-data"
+        req_body = {
+            "credential_configuration_id": config_id,
+            "claims": claims,
+            "expires_in": _config.certify_offer_expires_in,
+            "tx_code": _config.certify_tx_code,
+        }
+        _log_request("1-pre-authorized-data", "POST", url, body=req_body)
+        t0 = time.monotonic()
+        resp = await client.post(url, json=req_body)
+        _log_response("1-pre-authorized-data", resp, (time.monotonic() - t0) * 1000)
         self._raise_for_status(resp, "PRE_AUTHORIZED_DATA_FAILED")
         offer_uri = resp.json()["credential_offer_uri"]
         return urllib.parse.unquote(offer_uri).rstrip("/").split("/")[-1]
@@ -83,7 +147,11 @@ class CertifyIssuanceService(BaseService):
     async def _read_offer(
         self, client: httpx.AsyncClient, base: str, offer_id: str
     ) -> str:
-        resp = await client.get(f"{base}/credential-offer-data/{offer_id}")
+        url = f"{base}/credential-offer-data/{offer_id}"
+        _log_request("2-credential-offer-data", "GET", url)
+        t0 = time.monotonic()
+        resp = await client.get(url)
+        _log_response("2-credential-offer-data", resp, (time.monotonic() - t0) * 1000)
         self._raise_for_status(resp, "CREDENTIAL_OFFER_FETCH_FAILED")
         grants = resp.json()["grants"]
         return grants[self.PRE_AUTH_GRANT]["pre-authorized_code"]
@@ -91,14 +159,16 @@ class CertifyIssuanceService(BaseService):
     async def _exchange_token(
         self, client: httpx.AsyncClient, base: str, pre_auth_code: str
     ) -> tuple[str, str]:
-        resp = await client.post(
-            f"{base}/oauth/token",
-            data={
-                "grant_type": self.PRE_AUTH_GRANT,
-                "pre-authorized_code": pre_auth_code,
-                "tx_code": _config.certify_tx_code,
-            },
-        )
+        url = f"{base}/oauth/token"
+        form = {
+            "grant_type": self.PRE_AUTH_GRANT,
+            "pre-authorized_code": pre_auth_code,
+            "tx_code": _config.certify_tx_code,
+        }
+        _log_request("3-oauth-token", "POST", url, body=form)
+        t0 = time.monotonic()
+        resp = await client.post(url, data=form)
+        _log_response("3-oauth-token", resp, (time.monotonic() - t0) * 1000)
         self._raise_for_status(resp, "TOKEN_EXCHANGE_FAILED")
         body = resp.json()
         return body["access_token"], body.get("c_nonce", "")
@@ -112,18 +182,20 @@ class CertifyIssuanceService(BaseService):
         credential_types: list[str],
     ) -> Any:
         proof = self._make_proof_jwt(c_nonce)
-        resp = await client.post(
-            f"{base}/issuance/credential",
-            headers={"Authorization": f"Bearer {access_token}"},
-            json={
-                "format": _config.certify_credential_format,
-                "credential_definition": {
-                    "@context": _config.certify_credential_context,
-                    "type": credential_types,
-                },
-                "proof": {"proof_type": "jwt", "jwt": proof},
+        url = f"{base}/issuance/credential"
+        headers = {"Authorization": f"Bearer {access_token}"}
+        req_body = {
+            "format": _config.certify_credential_format,
+            "credential_definition": {
+                "@context": _config.certify_credential_context,
+                "type": credential_types,
             },
-        )
+            "proof": {"proof_type": "jwt", "jwt": proof},
+        }
+        _log_request("4-issuance-credential", "POST", url, headers=headers, body=req_body)
+        t0 = time.monotonic()
+        resp = await client.post(url, headers=headers, json=req_body)
+        _log_response("4-issuance-credential", resp, (time.monotonic() - t0) * 1000)
         self._raise_for_status(resp, "CREDENTIAL_ISSUANCE_FAILED")
         body = resp.json()
         # Return the CREDENTIAL, not the OpenID4VCI envelope that wraps it.
