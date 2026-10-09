@@ -1092,7 +1092,7 @@ class CredIssuerService(BaseService):
         # ------------------------------------------------------------------
         # Hardcoded email and district
         # ------------------------------------------------------------------
-        email = "nudili@denipl.net"
+        email = "dharanidharan.gpm@gmail.com"
         district = "Ganlulu"
 
         # ------------------------------------------------------------------
