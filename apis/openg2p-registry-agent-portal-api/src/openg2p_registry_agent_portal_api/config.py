@@ -203,7 +203,7 @@ class Settings(ExtSettings):
     # every other backend call the portal makes.
     verify_service_url: str = "http://commons-services-inji-verify-service/v1/verify"
     verify_timeout_seconds: int = 30
-    certify_http_timeout: int = 30
+    certify_http_timeout: int = 120
     certify_offer_expires_in: int = 600
     certify_tx_code: str = "1234"
     certify_credential_format: str = "ldp_vc"
