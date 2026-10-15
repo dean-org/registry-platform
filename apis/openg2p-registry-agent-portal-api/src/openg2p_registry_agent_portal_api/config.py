@@ -95,7 +95,7 @@ def _default_crop_vc_definition() -> "VcDefinition":
         view=CROP_TABLE,
         record_id_column="internal_record_id",
         claim_columns=CROP_CLAIM_COLUMNS,
-        svg_template=None,  # plain fallback layout until a crop-card.svg is shipped
+        svg_template="crop-card.svg",  # ship via the same ConfigMap as the farmer card; plain layout if absent
         qr_claim_path="claim169.qrCode",
         display_name="Crop Credential",
         qr_data_label="Farmer ID",
