@@ -571,19 +571,14 @@ class VcIssuanceController(BaseController):
             )
 
         claim_code = _claim_code(credential)
-        if not claim_code:
-            _logger.info(
-                "Issued credential has no claim code in its id, so the card cannot show one. Enable the "
-                "Certify vault (mosip.certify.vc-vault.enabled), set "
-                "mosip.certify.data-provider-plugin.id-field-prefix-uri and add "
-                "\"id\": \"${credentialId}\" to the credential template."
-            )
-        else:
-            _logger.info("Extracted claim code: %s", claim_code)
-        # Only the render copy carries the code (Certify never receives it); SVG cards use {{claimCode}}.
         render_claims = dict(claims)
         if claim_code:
             render_claims["claimCode"] = claim_code
+            _logger.info("Extracted claim code for credential PDF.")
+        else:
+            _logger.warning(
+                "Issued credential has no recognizable claim code in its id."
+            )
 
         try:
             pdf_bytes = self.pdf_render_service.render(
@@ -1069,9 +1064,19 @@ class VcIssuanceController(BaseController):
             await log_failure(error.message)
             return fail(error.code, error.message, status_code=502)
 
+        claim_code = _claim_code(credential)
+        render_claims = dict(claims)
+        if claim_code:
+            render_claims["claimCode"] = claim_code
+            _logger.info("Extracted claim code for crop credential.")
+        else:
+            _logger.warning(
+                "Crop credential has no recognizable claim code in its id."
+            )
+
         try:
             pdf_bytes = self.pdf_render_service.render(
-                claims,
+                render_claims,
                 credential,
                 crop_vc,
             )
