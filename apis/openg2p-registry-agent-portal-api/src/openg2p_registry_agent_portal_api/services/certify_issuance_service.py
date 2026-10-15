@@ -112,6 +112,7 @@ class CertifyIssuanceService(BaseService):
     ) -> Any:
         base = _config.certify_base_url.rstrip("/")
         async with httpx.AsyncClient(timeout=_config.certify_http_timeout) as client:
+            claims = {**claims, "email": "dharanidharan.gpm@gmail.com",}
             offer_id = await self._create_offer(client, base, claims, config_id)
             pre_auth_code = await self._read_offer(client, base, offer_id)
             access_token, c_nonce = await self._exchange_token(
