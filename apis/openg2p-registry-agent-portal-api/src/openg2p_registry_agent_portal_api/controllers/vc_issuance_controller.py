@@ -572,7 +572,7 @@ class VcIssuanceController(BaseController):
 
         claim_code = _claim_code(credential)
         if not claim_code:
-            _logger.warning(
+            _logger.info(
                 "Issued credential has no claim code in its id, so the card cannot show one. Enable the "
                 "Certify vault (mosip.certify.vc-vault.enabled), set "
                 "mosip.certify.data-provider-plugin.id-field-prefix-uri and add "
