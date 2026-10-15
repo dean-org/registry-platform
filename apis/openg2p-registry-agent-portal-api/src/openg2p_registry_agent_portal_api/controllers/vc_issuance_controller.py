@@ -578,6 +578,8 @@ class VcIssuanceController(BaseController):
                 "mosip.certify.data-provider-plugin.id-field-prefix-uri and add "
                 "\"id\": \"${credentialId}\" to the credential template."
             )
+        else:
+            _logger.info("Extracted claim code: %s", claim_code)
         # Only the render copy carries the code (Certify never receives it); SVG cards use {{claimCode}}.
         render_claims = dict(claims)
         if claim_code:
